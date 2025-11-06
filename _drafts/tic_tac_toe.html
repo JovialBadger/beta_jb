@@ -1,0 +1,338 @@
+---
+layout: default
+title: ttt
+category: games
+order: 1
+---
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Tic‑Tac‑Toe P2P — Staged Signaling</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body>
+  <div id="app"></div>
+
+  <!-- External engine dependency (single file) -->
+  <script src="{{ "/assets/js/game_engine.js" | relative_url }}"></script>
+
+  <script>
+  /* ============================
+     Inject CSS (all classes)
+     ============================ */
+  (function injectCSS(){
+    const css = `
+.tgt-wrap { font-family: Inter, Roboto, Arial, system-ui; max-width:980px; margin:28px auto; padding:20px; border-radius:12px; background:#fff; box-shadow:0 8px 30px rgba(2,6,23,0.08); }
+.tgt-row { display:flex; gap:14px; align-items:center; margin-bottom:12px; flex-wrap:wrap; }
+.tgt-col { flex:1; min-width:220px; }
+.h { font-size:20px; margin:0 0 6px 0; font-weight:700; color:#0f172a; }
+.muted { color:#6b7280; font-size:13px; }
+.controls { display:flex; gap:8px; flex-wrap:wrap; }
+.btn { padding:8px 12px; border-radius:8px; border:1px solid #e6e7eb; background:#f8fafc; cursor:pointer; font-weight:600; color:#0f172a; }
+.btn.primary { background:#0ea5a4; color:white; border-color:transparent; }
+.btn.ghost { background:transparent; border:1px dashed #cbd5e1; color:#0f172a; }
+.input { padding:8px 10px; border-radius:8px; border:1px solid #e6e7eb; min-width:260px; }
+.offer-box { font-family:monospace; font-size:12px; background:#f8fafc; padding:10px; border-radius:8px; border:1px solid #eef2ff; max-width:640px; overflow:auto; }
+.board { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; width:320px; margin-top:12px; }
+.cell { width:100px; height:100px; display:flex; align-items:center; justify-content:center; font-size:42px; border-radius:10px; border:2px solid #e6e7eb; cursor:pointer; user-select:none; background:#fff; }
+.cell.disabled { cursor:not-allowed; opacity:0.6; }
+.status { margin-top:12px; font-weight:700; color:#0f172a; }
+.players { display:flex; gap:8px; margin-top:10px; }
+.player { padding:8px 10px; border-radius:8px; background:#f1f5f9; font-size:13px; }
+.modal-backdrop { position:fixed; inset:0; background:rgba(2,6,23,0.45); display:flex; align-items:center; justify-content:center; z-index:60; }
+.modal { background:#fff; padding:16px; border-radius:10px; width:640px; box-shadow:0 12px 40px rgba(2,6,23,0.15); }
+.textarea { width:100%; min-height:120px; padding:10px; border-radius:8px; border:1px solid #e6e7eb; font-family:monospace; }
+.row-right { display:flex; justify-content:flex-end; gap:8px; margin-top:12px; }
+.small { font-size:13px; padding:6px 10px; border-radius:6px; }
+.badge { padding:6px 10px; background:#ecfeff; color:#065f46; border-radius:999px; font-weight:700; }
+.copyok { color:#059669; font-weight:700; font-size:13px; margin-left:8px; }
+.linklike { color:#0ea5a4; cursor:pointer; text-decoration:underline; }
+.footer { margin-top:16px; color:#6b7280; font-size:13px; }
+`;
+    const s = document.createElement('style');
+    s.textContent = css;
+    document.head.appendChild(s);
+  })();
+
+  /* ============================
+     App (uses external engine)
+     ============================ */
+
+  // Ensure engine is available
+  if (typeof createTurnGameEngine !== 'function') {
+    document.body.innerHTML = '<div style="padding:32px;font-family:Arial">Error: required engine file not loaded. Make sure <code>turn-game-engine.js</code> is present and exposes createTurnGameEngine().</div>';
+    throw new Error('Engine missing');
+  }
+
+  const engine = createTurnGameEngine();
+
+  // Simple Tic-Tac-Toe reducer (same contract expected by engine)
+  function tttReducer(state, action, localPlayerId) {
+    if (!state.payload) state.payload = { board: Array(9).fill(null), winner: null };
+    function checkWin(board){
+      const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+      for (const [a,b,c] of lines) if (board[a] && board[a] === board[b] && board[a] === board[c]) return board[a];
+      return null;
+    }
+    if (action.type === 'MAKE_MOVE') {
+      if (state.currentTurn !== localPlayerId) return { state, error: 'Not your turn' };
+      if (state.payload.board[action.pos] !== null) return { state, error: 'Cell occupied' };
+      const board = state.payload.board.slice();
+      const mark = state.players.indexOf(state.currentTurn) === 0 ? 'X' : 'O';
+      board[action.pos] = mark;
+      const winner = checkWin(board);
+      const nextTurnIdx = (state.players.indexOf(state.currentTurn) + 1) % state.players.length;
+      const next = { ...state, payload: { board, winner }, turnNumber: state.turnNumber + 1, currentTurn: state.players[nextTurnIdx], lastUpdatedAt: Date.now() };
+      // compute a simple hash (engine will also compute; ensure deterministic)
+      next.hash = (function(s){ let h=2166136261; const str=JSON.stringify({payload:s.payload,turnNumber:s.turnNumber,currentTurn:s.currentTurn}); for(let i=0;i<str.length;i++){h^=str.charCodeAt(i);h=(h*16777619)>>>0;} return ('0000000'+(h>>>0).toString(16)).slice(-8); })(next);
+      return { state: next, error: null };
+    }
+    if (action.type === 'SYNC_SNAPSHOT') return { state: action.snapshot, error: null };
+    return { state, error: null };
+  }
+
+  // App state
+  const appState = {
+    localId: localStorage.getItem('tgt:localId') || ('u'+Math.random().toString(36).slice(2,9)),
+    role: null,
+    currentGameId: null,
+    hostOfferStr: null,
+    joinAnswerStr: null,
+    sessionHandle: null
+  };
+  localStorage.setItem('tgt:localId', appState.localId);
+
+  // Build DOM
+  const root = document.getElementById('app');
+  root.innerHTML = '';
+  const wrap = document.createElement('div'); wrap.className = 'tgt-wrap';
+  root.appendChild(wrap);
+
+  // Header
+  const hdr = document.createElement('div'); hdr.className='tgt-row';
+  const col = document.createElement('div'); col.className='tgt-col';
+  col.appendChild(Object.assign(document.createElement('div'), { className:'h', textContent:'Tic‑Tac‑Toe P2P — Staged Signaling' }));
+  col.appendChild(Object.assign(document.createElement('div'), { className:'muted', textContent:'One external script dependency: turn-game-engine.js. Staged offer/answer flows for easy manual signaling.' }));
+  hdr.appendChild(col);
+  wrap.appendChild(hdr);
+
+  // Main UI columns
+  const main = document.createElement('div'); main.className='tgt-row';
+
+  // Host column
+  const hostCol = document.createElement('div'); hostCol.className='tgt-col';
+  hostCol.appendChild(Object.assign(document.createElement('div'), { className:'h', textContent:'Host (Step 1)' }));
+  hostCol.appendChild(Object.assign(document.createElement('div'), { className:'muted', textContent:'Create an offer and share the string or offer link with your opponent.' }));
+
+  const hostControls = document.createElement('div'); hostControls.className='controls';
+  const btnCreate = Object.assign(document.createElement('button'), { className:'btn primary', textContent:'Create Offer' });
+  const btnCopyOffer = Object.assign(document.createElement('button'), { className:'btn', textContent:'Copy Offer' });
+  const btnShare = Object.assign(document.createElement('button'), { className:'btn ghost', textContent:'Create Shareable URL' });
+  hostControls.appendChild(btnCreate); hostControls.appendChild(btnCopyOffer); hostControls.appendChild(btnShare);
+  hostCol.appendChild(hostControls);
+
+  const offerBox = Object.assign(document.createElement('pre'), { className:'offer-box', id:'offerBox', textContent:'No offer yet' });
+  hostCol.appendChild(offerBox);
+
+  // Host apply answer (Step 3)
+  hostCol.appendChild(Object.assign(document.createElement('div'), { className:'h', textContent:'Finalize (Step 3)' }));
+  hostCol.appendChild(Object.assign(document.createElement('div'), { className:'muted', textContent:'Paste the joiner answer here to complete connection.' }));
+  const answerArea = Object.assign(document.createElement('textarea'), { className:'textarea', id:'hostAnswer', placeholder:'Paste joiner answer JSON here' });
+  const btnApplyAnswer = Object.assign(document.createElement('button'), { className:'btn primary', textContent:'Apply Answer' });
+  hostCol.appendChild(answerArea); hostCol.appendChild(Object.assign(document.createElement('div'), { className:'row-right' }, ));
+  hostCol.appendChild(btnApplyAnswer);
+
+  // Join column
+  const joinCol = document.createElement('div'); joinCol.className='tgt-col';
+  joinCol.appendChild(Object.assign(document.createElement('div'), { className:'h', textContent:'Join (Step 2)' }));
+  joinCol.appendChild(Object.assign(document.createElement('div'), { className:'muted', textContent:'Paste host offer or open an offer link. Then generate and copy the answer to send back to the host.' }));
+  const joinInput = Object.assign(document.createElement('textarea'), { className:'textarea', id:'joinInput', placeholder:'Paste host offer JSON or open offer link' });
+  const btnJoin = Object.assign(document.createElement('button'), { className:'btn primary', textContent:'Create Answer (Copy)' });
+  const btnLoadOfferFromURL = Object.assign(document.createElement('button'), { className:'btn', textContent:'Load Offer from URL' });
+  joinCol.appendChild(joinInput);
+  joinCol.appendChild(Object.assign(document.createElement('div'), { className:'controls' }, ));
+  joinCol.appendChild(Object.assign(document.createElement('div'), { className:'controls' }, ));
+  joinCol.appendChild(btnLoadOfferFromURL);
+  joinCol.appendChild(btnJoin);
+
+  const answerOut = Object.assign(document.createElement('pre'), { className:'offer-box', id:'answerOut', textContent:'Answer will appear here after joining' });
+  joinCol.appendChild(answerOut);
+
+  main.appendChild(hostCol);
+  main.appendChild(joinCol);
+  wrap.appendChild(main);
+
+  // Game/Status area
+  const gameArea = document.createElement('div'); gameArea.className='tgt-row';
+  const leftArea = document.createElement('div'); leftArea.className='tgt-col';
+  const rightArea = document.createElement('div'); rightArea.className='tgt-col';
+
+  leftArea.appendChild(Object.assign(document.createElement('div'), { className:'h', textContent:'Game Board' }));
+  leftArea.appendChild(Object.assign(document.createElement('div'), { className:'muted', textContent:'Click to make a move when it is your turn.' }));
+  const board = document.createElement('div'); board.className='board'; board.id='board';
+  for (let i=0;i<9;i++){ const c = document.createElement('div'); c.className='cell disabled'; c.dataset.pos = i; board.appendChild(c); }
+  leftArea.appendChild(board);
+
+  rightArea.appendChild(Object.assign(document.createElement('div'), { className:'h', textContent:'Status' }));
+  const status = Object.assign(document.createElement('div'), { className:'status', id:'status', textContent:'No game' });
+  const players = Object.assign(document.createElement('div'), { className:'players', id:'players' });
+  rightArea.appendChild(status);
+  rightArea.appendChild(players);
+
+  gameArea.appendChild(leftArea);
+  gameArea.appendChild(rightArea);
+  wrap.appendChild(gameArea);
+
+  // Footer
+  const footer = Object.assign(document.createElement('div'), { className:'footer', textContent:'Offer strings are compact JSON; share them securely. Answer strings complete the manual signaling.' });
+  wrap.appendChild(footer);
+
+  /* ============================
+     Helper functions & flows
+     ============================ */
+
+  function showOffer(text){
+    offerBox.textContent = text;
+  }
+  function showAnswerOut(text){
+    answerOut.textContent = text;
+  }
+  function showStatus(t){
+    status.textContent = t;
+  }
+  function refreshBoardView(){
+    if (!appState.currentGameId) return;
+    const gstate = engine.getState(appState.currentGameId);
+    if (!gstate) { showStatus('Waiting for peer...'); return; }
+    showStatus(`Game ${appState.currentGameId} — Turn: ${gstate.currentTurn === appState.localId ? 'Your turn' : 'Opponent' }`);
+    players.innerHTML = '';
+    (gstate.players||[]).forEach(p=> players.appendChild(Object.assign(document.createElement('div'),{className:'player', textContent: p === appState.localId ? (p + ' (you)') : p})));
+   
+    const payload = Object.keys(gstate.payload).length === 0 && gstate.payload.constructor === Object ? { board: Array(9).fill(null), winner: null }:gstate.payload;
+    for (let i=0;i<9;i++){
+      const c = board.children[i];  
+      c.textContent = payload.board[i] || '';
+      c.classList.toggle('disabled', gstate.currentTurn !== appState.localId || payload.winner !== null);
+    }
+    if (payload.winner) showStatus('Game over — winner: ' + payload.winner);
+  }
+
+  // Host: create offer (Stage 1)
+  btnCreate.addEventListener('click', async ()=>{
+    const gameId = 't3-' + Math.random().toString(36).slice(2,9);
+    appState.currentGameId = gameId;
+    const initial = { gameId, players: [appState.localId, 'guest'], currentTurn: appState.localId, turnNumber:0, payload:{ board:Array(9).fill(null), winner:null }, clocks:{ lamport:0, counters: {[appState.localId]:0 } } };
+    const created = await engine.createGame({
+      gameId,
+      localPlayerId: appState.localId,
+      initialState: initial,
+      reducer: tttReducer,
+      onEvent: ()=> refreshBoardView(),
+      onStatus: ()=> refreshBoardView()
+    });
+    appState.role = 'host';
+    appState.sessionHandle = created;
+    appState.hostOfferStr = created.link;
+    showOffer(created.link);
+    // Persist offer in URL for convenience
+    const url = new URL(location.href);
+    url.searchParams.set('offer', encodeURIComponent(created.link));
+    history.replaceState({}, '', url);
+  });
+
+  // Host: copy offer
+  btnCopyOffer.addEventListener('click', async ()=>{
+    if (!appState.hostOfferStr) return alert('No offer yet');
+    try { await navigator.clipboard.writeText(appState.hostOfferStr); const m = document.createElement('span'); m.className='copyok'; m.textContent='Copied'; offerBox.parentNode.appendChild(m); setTimeout(()=>m.remove(),1200); } catch { alert('Copy failed — select and copy manually.'); }
+  });
+
+  // Host: create shareable URL with offer in query param
+  btnShare.addEventListener('click', ()=>{
+    if (!appState.hostOfferStr) return alert('No offer yet');
+    const url = new URL(location.href);
+    url.searchParams.set('offer', encodeURIComponent(appState.hostOfferStr));
+    prompt('Share this URL with your opponent (offer encoded):', url.toString());
+  });
+
+  // Host: apply answer (Stage 3 finalize)
+  btnApplyAnswer.addEventListener('click', async ()=>{
+    if (!appState.sessionHandle) return alert('No host session');
+    const txt = answerArea.value.trim();
+    if (!txt) return alert('Paste answer JSON from joiner');
+    try {
+      const parsed = JSON.parse(txt);
+      await appState.sessionHandle.setAnswer(parsed);
+      showStatus('Answer applied — establishing connection');
+      // small delay to let DataChannel sync
+      setTimeout(()=>refreshBoardView(), 800);
+    } catch(e){ alert('Invalid answer JSON'); }
+  });
+
+  // Joiner: load offer from URL (convenience)
+  btnLoadOfferFromURL.addEventListener('click', ()=>{
+    const params = new URLSearchParams(location.search);
+    if (!params.has('offer')) return alert('No offer in URL');
+    try {
+      const offerStr = decodeURIComponent(params.get('offer'));
+      joinInput.value = offerStr;
+    } catch(e){ alert('Bad offer in URL'); }
+  });
+
+  // Joiner: create answer (Stage 2)
+  btnJoin.addEventListener('click', async ()=>{
+    const txt = joinInput.value.trim();
+    if (!txt) return alert('Paste host offer string or load from URL');
+    try {
+      const joinResult = await engine.joinGame({
+        localPlayerId: appState.localId,
+        link: txt,
+        reducer: tttReducer,
+        onEvent: ()=> refreshBoardView(),
+        onStatus: ()=> refreshBoardView()
+      });
+      // joinResult.answer is answer JSON string — copy it for host
+      showAnswerOut(joinResult.answer);
+      try { await navigator.clipboard.writeText(joinResult.answer); alert('Answer created and copied to clipboard — send it to the host'); } catch { alert('Answer created — copy it and send to host'); }
+      appState.role = 'joiner';
+      appState.currentGameId = joinResult.gameId;
+      appState.sessionHandle = joinResult;
+      // Also append answer param to URL for optional host auto-apply (host must open same URL)
+      const url = new URL(location.href);
+      url.searchParams.set('answer', encodeURIComponent(joinResult.answer));
+      history.replaceState({}, '', url);
+      refreshBoardView();
+    } catch(e){ alert('Join failed: ' + (e.message || e)); }
+  });
+
+  // Board click -> local move through engine
+  board.addEventListener('click', (ev)=>{
+    const cell = ev.target.closest('.cell');
+    if (!cell) return;
+    const pos = Number(cell.dataset.pos);
+    if (!appState.currentGameId) return alert('No active game');
+    const res = engine.makeMove({ pos },appState.currentGameId)
+    if (!res.ok) return alert('Move failed: ' + res.error);
+    refreshBoardView();
+  });
+
+  // On load: if URL has offer param and user wants to join quickly, fill join field
+  (function prefillFromURL(){
+    const params = new URLSearchParams(location.search);
+    if (params.has('offer')) {
+      try { const offerStr = decodeURIComponent(params.get('offer')); document.querySelector('#joinInput').value = offerStr; } catch {}
+    }
+    if (params.has('answer')) {
+      // If host opened URL with answer param, populate host answer textarea
+      try { const ans = decodeURIComponent(params.get('answer')); document.querySelector('#hostAnswer').value = ans; } catch {}
+    }
+  })();
+
+  // initial UI
+  refreshBoardView();
+  showOffer('No offer yet');
+  showAnswerOut('Answer will appear after joining');
+  showStatus('Idle — Create or join a game');
+  </script>
+</body>
+</html>

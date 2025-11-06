@@ -1,0 +1,22 @@
+{% assign groupedPages = site.pages | sort: 'category' %}
+{% assign mydocs = groupedPages | group_by: 'category' %}
+{% for cat in mydocs %}
+    {% assign items = cat.items | sort: 'title' %}
+    {% assign catName = cat.name | upcase %}
+    {% if catName == "" %}
+    {% elsif catName == "1HOME_PAGES" %}
+        <ul>
+            {% for item in items %}
+                <li><a href="{{ item.url }}">{{ item.title }}</a></li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <details open><summary>{{catName}}</summary>
+            <ul>
+                {% for item in items %}
+                    <li><a href="{{ item.url }}">{{ item.title }}</a></li>
+                {% endfor %}
+            </ul>
+        </details>
+    {% endif %}
+{% endfor %}

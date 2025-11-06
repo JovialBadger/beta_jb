@@ -1,0 +1,55 @@
+<!-- Settings Button -->
+<button id="open-settings-btn">⚙</button>
+
+<!-- Fullscreen Settings Menu -->
+<div id="settings-menu">
+    <div class="settings-content">
+        <h2>Site Settings</h2>
+        <!-- Add your settings form fields here -->
+        <div class="settings-actions">
+            <button id="save-settings-btn">Save</button>
+            <button id="close-settings-btn">Close</button>
+        </div>
+    </div>
+</div>
+
+<style>
+    #settings-menu {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100vw;
+        height: 100vh;
+        background: rgba(255,255,255,0.98);
+        z-index: 10000;
+        box-shadow: 0 0 20px rgba(0,0,0,0.2);
+    }
+    #settings-menu  .settings-content {
+        max-width: 500px;
+        margin: 60px auto;
+        padding: 40px;
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    }
+    #settings-menu  .settings-actions {
+        margin-top: 40px;
+        display: flex;
+        justify-content: space-between;
+    }
+</style>
+<script>
+    const openBtn = document.getElementById('open-settings-btn');
+    const menu = document.getElementById('settings-menu');
+    const closeBtn = document.getElementById('close-settings-btn');
+
+    openBtn.onclick = () => { menu.style.display = 'block'; };
+    closeBtn.onclick = () => { menu.style.display = 'none'; };
+
+    // Optional: Save button handler
+    document.getElementById('save-settings-btn').onclick = function() {
+        // Add save logic here
+        menu.style.display = 'none';
+    };
+</script>

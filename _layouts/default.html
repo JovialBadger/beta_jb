@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="{{ site.lang | default: "en-US" }}">
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8">
+    <title>{{ page.title }} - {{ site.title }}</title>
+    <link rel="stylesheet" href="{{ "/assets/css/main.css" | relative_url }}">  
+    <link rel="stylesheet" href="{{ "/assets/css/default.css" | relative_url }}">  
+    <meta name="description" content="Jovial Badger — coding applications, experiments, and hobbies. Minimal, accessible, mobile-first.">
+    <meta property="og:title" content="Jovial Badger">
+    <meta property="og:description" content="Coding applications, experiments, and hobbies.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://jovialbadger.co.uk/">
+    <meta property="og:image" content="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
+		<link rel="icon" type="image/png" href="{{ "/assets/logo/letters_logo.svg" | relative_url }}">
+    <link rel="manifest" href="{{ "/assets/pwa/manifest.json" | relative_url }}">
+    <meta name="theme-color" content="#317EFB"/>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
+    <link rel="apple-touch-icon" sizes="152x152" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
+    <link rel="apple-touch-icon" sizes="167x167" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
+    <link rel="apple-touch-icon" sizes="180x180" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
+    <link rel="apple-touch-icon" sizes="192x192" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
+    <link rel="apple-touch-icon" sizes="228x228" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
+    <script src="{{ "/assets/js/default.js" | relative_url }}" defer></script>
+  </head>
+  <body>
+    <nav class='sideMenuNav'>
+      <div class="navContainer">
+        <button class="btnNavToggle" aria-label="Toggle navigation menu">&#9776;</button>
+        <img src="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}" alt="Site Logo">
+        {% include settings.html %}
+        <div class="navItems" role="navigation" aria-label="Main Navigation">{% include nav.html %}</div>
+        <div class="socialItems" role="navigation" aria-label="Social Media Links">{% include social.html %}</div>
+      </div>
+    </nav>
+    <section class="siteHeader">{% include header.html %}</section>
+    <section class="siteContent">{{ content }}</section>
+    <section class="siteFooter">{% include footer.html %}</section>
+    <script src="{{ "/assets/pwa/app.js" | relative_url }}" defer></script>
+  </body>
+</html>

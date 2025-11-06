@@ -1,0 +1,1 @@
+{"version":3,"sourceRoot":"","sources":["../../_sass/base.scss"],"names":[],"mappings":"AAAA;AAAA;AAAA;;AAAA;AAAA;AAAA;AAAA;AAAA;AAAA","sourcesContent":["/*$backgroundColor: #ffffff;\n$bodyColor: #000000;\n$bodyFont: Verdana, sans-serif;\n\nbody {\n  background: $backgroundColor;\n  color: $bodyColor;\n  font-family: $bodyFont;\n}\n*/"],"file":"main.css"}

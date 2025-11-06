@@ -1,0 +1,14 @@
+---
+---
+{
+  "name": "Jovial Badger",
+  "short_name": "JB",
+  "start_url": "{{ "/index.html" | relative_url }}",
+  "display": "standalone",
+  "background_color": "#ccc",
+  "theme_color": "#640000",
+  "icons": [
+    { "src": "{{ "/assets/logo/letters_logo.svg" | relative_url }}", "sizes": "192x192", "type": "image/png" },
+    { "src": "{{ "/assets/logo/letters_logo.svg" | relative_url }}", "sizes": "512x512", "type": "image/png" }
+  ]
+}
