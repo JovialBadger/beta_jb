@@ -7,14 +7,14 @@
     {% elsif catName == "1HOME_PAGES" %}
         <ul>
             {% for item in items %}
-                <li><a href="{{ item.url }}">{{ item.title }}</a></li>
+                <li><a href="{{ item.url | relative_url }}">{{ item.title }}</a></li>
             {% endfor %}
         </ul>
     {% else %}
         <details open><summary>{{catName}}</summary>
             <ul>
                 {% for item in items %}
-                    <li><a href="{{ item.url }}">{{ item.title }}</a></li>
+                    <li><a href="{{ item.url | relative_url }}">{{ item.title }}</a></li>
                 {% endfor %}
             </ul>
         </details>
