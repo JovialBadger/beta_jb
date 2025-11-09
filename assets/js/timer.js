@@ -988,7 +988,7 @@ function createUrlTimer(containerId) {
 }
 
 
-const urlTime = {{ site.default_site_url }};
+const urlTime = `{{ site.default_site_url }}`;
 if (typeof site !== 'undefined') {
   if (!window.location.href.includes(urlTime)) {
     createUrlTimer();

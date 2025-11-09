@@ -696,7 +696,7 @@ class LogCapture {
 /* Example inline init:
    const lc = new LogCapture({ settingsButtonSelector: '#log-settings-button' });
 */
-const url = {{ site.default_site_url }};
+const url = `{{ site.default_site_url }}`;
 if (typeof site !== 'undefined') {
   if (!window.location.href.includes(url)) {
     const lc = new LogCapture();

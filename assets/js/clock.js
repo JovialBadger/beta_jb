@@ -667,7 +667,7 @@ function AnalogClockApp(containerId, clocksConfig = []) {
   return appRoot;
 
 }
-const urlClock = {{ site.default_site_url }};
+const urlClock = `{{ site.default_site_url }}`;
 if (typeof site !== 'undefined') {
   if (!window.location.href.includes(urlClock)) {
     AnalogClockApp();
