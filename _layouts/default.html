@@ -24,10 +24,10 @@
     <link rel="apple-touch-icon" sizes="192x192" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
     <link rel="apple-touch-icon" sizes="228x228" href="{{ "/assets/logo/badger_letters_logo.svg" | relative_url }}">
     <script src="{{ "/assets/js/log_capture.js" | relative_url }}"></script>
-	  <script>const _log = new LogCapture();</script>
     <script src="{{ "/assets/js/default.js" | relative_url }}" defer></script>
   </head>
   <body>
+	  <script>const _log = new LogCapture({settingsButtonSelector:'setting-items'});</script>
     <nav class='sideMenuNav'>
       <div class="navContainer">
         <button class="btnNavToggle" aria-label="Toggle navigation menu">&#9776;</button>

@@ -6,6 +6,9 @@
     <div class="settings-content">
         <h2>Site Settings</h2>
         <!-- Add your settings form fields here -->
+        <div class="setting-items">
+            <button id="local-storage-clear-btn">Clear Local Storage</button>
+        </div>
         <div class="settings-actions">
             <button id="save-settings-btn">Save</button>
             <button id="close-settings-btn">Close</button>
@@ -52,4 +55,10 @@
         // Add save logic here
         menu.style.display = 'none';
     };
+    // Clear Local Storage button handler
+    document.getElementById('local-storage-clear-btn').onclick = function() {
+        localStorage.clear();
+        alert('Local storage has been cleared.');
+    };
+    
 </script>

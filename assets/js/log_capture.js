@@ -48,14 +48,25 @@ class LogCapture {
   // Public API
   // =========================
   attachSettingsButton(selector) {
-    const settingBtn = document.createElement('button');
-    //settingBtn.id = 'console-log-button';
-    settingBtn.textContent = 'Setting';
-
-   // const btn = document.querySelector(selector);
-    //if (!btn) 
-document.body.appendChild(settingBtn);
-    settingBtn.addEventListener('click', () => this.showSettingsModal());
+    // Wait for DOM ready before attaching button
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => {
+        appendAndListen()
+      });
+    } else {
+      appendAndListen()
+    }
+    function appendAndListen() {
+      const settingBtn = document.createElement('button');
+      settingBtn.textContent = '⚙ Console Logs';
+      const btn = document.querySelector(selector);
+      if (btn) {
+        btn.appendChild(settingBtn);
+      } else {
+        document.body.appendChild(settingBtn);
+      }
+      settingBtn.addEventListener('click', () => this.showSettingsModal());
+    }
   }
 
   showSettingsModal() {
