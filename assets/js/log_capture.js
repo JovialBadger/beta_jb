@@ -344,7 +344,11 @@ class LogCapture {
 
     const openLogBtn = document.createElement('button');
     openLogBtn.textContent = 'Open full log';
-    openLogBtn.addEventListener('click', () => this.showLogModal());
+    openLogBtn.addEventListener('click', () => {
+      modal.remove();
+      this.settingsModalEl = null;
+      this.showLogModal()
+    });
 
     const closeBtn = document.createElement('button');
     closeBtn.textContent = 'Close';
