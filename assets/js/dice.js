@@ -681,6 +681,7 @@ const setsWithRolls = setsToRoll.map(s => ({ ...s, rolls: this.doRollsForSet(s, 
         const root = this.container.querySelector(".dice-results");
         root.innerHTML = "";
       }
+      this.renderPresets();
     }
 
     saveState() {
