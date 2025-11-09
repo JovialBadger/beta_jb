@@ -610,11 +610,23 @@ background: #c33;
 					useCache = false;
 				}
 			}
-			var cache = await caches.open("my-cache");
-			var dl = useCache ? await cache.match(URL) : await fetch(URL);
-			dl = (!dl?.ok ?? true) ? await fetch(URL) : dl;
-			if (!dl.ok) { return null; }
-			cache.put(URL, dl.clone());
+			let dl;
+			let cache;
+			if (window.caches) {
+				cache = await caches.open("my-cache");
+				dl = useCache ? await cache.match(URL) : await fetch(URL);
+				dl = (!dl?.ok ?? true) ? await fetch(URL) : dl;
+				if (!dl.ok) { return null; }
+				cache.put(URL, dl.clone());
+			} else {
+				dl = await fetch(URL);
+				if (!dl.ok) { return null; }
+			}
+			// var cache = await caches.open("my-cache");
+			// var dl = useCache ? await cache.match(URL) : await fetch(URL);
+			// dl = (!dl?.ok ?? true) ? await fetch(URL) : dl;
+			// if (!dl.ok) { return null; }
+			// cache.put(URL, dl.clone());
 			var processedData = null;
 			switch (dataType) {
 				case "CSV":
