@@ -673,6 +673,11 @@ function diceApp(containerId, options = {}) {
     reset() {
       //this.state = this.state { input: "", unique: false, results: null, timestamp: null };
       this.state = { ...this.state, ...{ input: "", unique: false, results: null, timestamp: null } };
+      for (const key in this.state.presets) {
+        if (Object.prototype.hasOwnProperty.call(this.state.presets, key)) {
+          this.state.presets[key] = 0;
+        }
+      }
       this.saveState();
       if (this.container) {
         const form = this.container.querySelector(".dice-form");
