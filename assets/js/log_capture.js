@@ -35,8 +35,8 @@ class LogCapture {
       // Order: info < log < warn < error (error is highest severity)
       logLevel: 'info',
       // Persist logs across reloads and limit stored quantity
-      persistLogs: false,
-      maxLogs: 100,
+      persistLogs: true,
+      maxLogs: 250,
       // Where the settings button is located
       settingsButtonSelector: '[data-log-settings-button]',
       // Inject CSS automatically
