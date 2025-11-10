@@ -91,7 +91,7 @@
       //mediaUrls: [],
       //thumbUrls: [],
       //metadataMap: {},
-      media: [{ mediaSelector: { selector: 'img', attr: 'src' } }],
+      media: [{ mediaSelector: [{ selector: 'img', attr: 'src' }] }],
       direct: [],//{ url:x, thumb:z, meta:{}};
 
       startIndex: 0,
@@ -275,6 +275,8 @@
 
     function extractBySelectors(pairs) {
       const results = [];
+      //const selector = pair.selector || null;
+      //const attr = pair.attr || null;
       if (!Array.isArray(pairs)) return results;
       pairs.forEach(({ selector, attr }) => {
         if (!selector) return;
@@ -296,19 +298,19 @@
       });
       return results;
     }
-    function extractMediaFromPage(mediaSelectors, direct) {
-      const s = extractBySelectors(mediaSelectors);
-      const d = Array.isArray(direct) ? direct.map(u => ({ url: u, sourceEl: null })) : [];
-      return [...s, ...d];
-    }
-    function extractThumbsFromPage(thumbSelectors, direct, mediaList) {
-      if ((thumbSelectors && thumbSelectors.length) || (direct && direct.length)) {
-        const s = extractBySelectors(thumbSelectors);
-        const d = Array.isArray(direct) ? direct.map(u => ({ url: u })) : [];
-        return [...s, ...d].map(x => x.url);
-      }
-      return mediaList.map(m => m.url);
-    }
+    // function extractMediaFromPage(mediaSelectors, direct) {
+    //   const s = extractBySelectors(mediaSelectors);
+    //   const d = Array.isArray(direct) ? direct.map(u => ({ url: u, sourceEl: null })) : [];
+    //   return [...s, ...d];
+    // }
+    // function extractThumbsFromPage(thumbSelectors, direct, mediaList) {
+    //   if ((thumbSelectors && thumbSelectors.length) || (direct && direct.length)) {
+    //     const s = extractBySelectors(thumbSelectors);
+    //     const d = Array.isArray(direct) ? direct.map(u => ({ url: u })) : [];
+    //     return [...s, ...d].map(x => x.url);
+    //   }
+    //   return mediaList.map(m => m.url);
+    // }
     function mergeMediaAndThumbs(mediaList, thumbList, metadataMap) {
       return mediaList.map((m, i) => {
         const type = detectType(m.url, m.sourceEl);
