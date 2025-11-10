@@ -279,7 +279,7 @@
       const attr = pair.attr || null;
       //if (!Array.isArray(pairs)) return results;
       //pairs.forEach(({ selector, attr }) => {
-        if (!selector) return;
+        if (!selector) return [];
         const nodes = document.querySelectorAll(selector);
         nodes.forEach(el => {
           let url = null;
