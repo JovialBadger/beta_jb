@@ -166,7 +166,7 @@
         const _media = extractBySelectors(m.mediaSelector);
         var _thumb = [];
         if (m.thumbSelector) _thumb = extractBySelectors(m.thumbSelector);
-        results.push(...mergeMediaAndThumbs(_media, _thumb.map(t => t.url), {}));
+        results.push(...mergeMediaAndThumbs(_media, _thumb.length > 0 ? _thumb.map(t => t.url) : [], {}));
       });
       direct.forEach(d => {
         const type = detectType(d.url, null);
