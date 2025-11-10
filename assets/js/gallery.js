@@ -91,7 +91,7 @@
       //mediaUrls: [],
       //thumbUrls: [],
       //metadataMap: {},
-      media: [{ mediaSelector: [{ selector: 'img', attr: 'src' }] }],
+      media: [{ mediaSelector: { selector: 'img', attr: 'src' } }],
       direct: [],//{ url:x, thumb:z, meta:{}};
 
       startIndex: 0,
@@ -273,12 +273,12 @@
       return 'image';
     }
 
-    function extractBySelectors(pairs) {
+    function extractBySelectors(pair) {
       const results = [];
-      //const selector = pair.selector || null;
-      //const attr = pair.attr || null;
-      if (!Array.isArray(pairs)) return results;
-      pairs.forEach(({ selector, attr }) => {
+      const selector = pair.selector || null;
+      const attr = pair.attr || null;
+      //if (!Array.isArray(pairs)) return results;
+      //pairs.forEach(({ selector, attr }) => {
         if (!selector) return;
         const nodes = document.querySelectorAll(selector);
         nodes.forEach(el => {
@@ -295,7 +295,7 @@
           }
           if (url) results.push({ url, sourceEl: el });
         });
-      });
+      //});
       return results;
     }
     // function extractMediaFromPage(mediaSelectors, direct) {
@@ -1393,7 +1393,7 @@
         const inp2 = adv.querySelector('input[data-add="thumbs"]');
         const val2 = (inp2.value || '').trim();
         const arr2 = val2.split('|');
-        options.media.push({ mediaSelector: [{ selector: arr1[0], attr: arr1[1] || undefined }], thumbSelector: val2 ? [{ selector: arr2[0], attr: arr2[1] || undefined }] : [] });
+        options.media.push({ mediaSelector: { selector: arr1[0], attr: arr1[1] || undefined }, thumbSelector: val2 ? { selector: arr2[0], attr: arr2[1] || undefined } : {} });
         inp2.value = '';
         onSettingsChanged(true);
       });
