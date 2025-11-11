@@ -1,5 +1,5 @@
 ---
-  ---
+---
   // ==UserScript==
   // @name        JB_Script_Media-Gallery
   // @description Media Gallery (single-function, vanilla JS)
