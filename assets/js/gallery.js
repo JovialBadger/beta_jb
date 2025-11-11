@@ -1,5 +1,5 @@
 ---
----
+  ---
   // ==UserScript==
   // @name        JB_Script_Media-Gallery
   // @description Media Gallery (single-function, vanilla JS)
@@ -117,7 +117,7 @@
 
       namespace: null,
     };
-
+    let _imgTimer;
     const STORAGE_NS = `mg:${location.origin}${location.pathname}` + ':';
     const LS = {
       settings: (userOptions.namespace || DEFAULTS.namespace || STORAGE_NS) + 'settings',
@@ -846,6 +846,7 @@
         img.alt = item.meta?.title || `Item ${dispIdx + 1}`;
         el.appendChild(img);
         el.addEventListener('click', () => {
+          clearTimeout(_imgTimer);
           state.currentIndex = dispIdx;
           state.rotationDeg = 0;
           state.videoLoopCounter = 0;
@@ -936,7 +937,7 @@
             vid.currentTime = 0;
             vid.play().catch(() => { });
           } else if (options.videoAutoAdvance) {
-            setTimeout(next, options.videoAdvanceDelayMs || 0);
+            _imgTimer = setTimeout(next, options.videoAdvanceDelayMs || 0);
           }
         });
         vid.addEventListener('loadedmetadata', () => {
@@ -976,9 +977,9 @@
       mediaEl.appendChild(node);
 
       // Auto-advance images when playing
-      clearTimeout(mediaEl._imgTimer);
+      clearTimeout(_imgTimer);
       if (item.type === 'image' && state.playing && options.imageAutoAdvance) {
-        mediaEl._imgTimer = setTimeout(next, options.imageDelayMs);
+        _imgTimer = setTimeout(next, options.imageDelayMs);
       }
     }
 
