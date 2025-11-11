@@ -1346,11 +1346,11 @@
 
         let mediaDesc = '';
         if (m.mediaSelector) {
-          mediaDesc = m.mediaSelector.selector + m.mediaSelector.attr ? '|' + m.mediaSelector.attr : '';
+          mediaDesc = m.mediaSelector.selector + (m.mediaSelector.attr ? ('|' + m.mediaSelector.attr) : '');
         }
         let thumbDesc = '';
         if (m.thumbSelector) {
-          thumbDesc = m.thumbSelector.selector + m.thumbSelector.attr ? '|' + m.thumbSelector.attr : '';
+          thumbDesc = m.thumbSelector.selector + (m.thumbSelector.attr ? ('|' + m.thumbSelector.attr) : '');
           //thumbDesc = m.thumbSelector.map(ts => `${ts.selector}${ts.attr ? '|' + ts.attr : ''}`).join(', ');
         }
         itemDiv.innerHTML = `<span style="font-size:12px;">
