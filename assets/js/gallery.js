@@ -1079,7 +1079,7 @@
     }
 
     function prev(rev = false) {
-      if (options.order === 'backwards' && !rev) { prev(true); return; }
+      if (options.order === 'backwards' && !rev) { next(true); return; }
       if (options.order === 'random') { goToRandomImage(); return; }
       state.rotationDeg = 0;
       state.videoLoopCounter = 0;
