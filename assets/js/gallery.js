@@ -8,10 +8,10 @@
   // @match       *://*/*
   // @grant       none
   // @author      Jovial Badger
-  // @downloadURL {{ site.url }}{{site.baseurl}}{{page.url}}
+  // @downloadURL {{ site.url }}{{site.baseurl}}{{page.url | relative_url }}
   // @updateURL   {{ site.url }}{{site.baseurl}}{{page.url}}
   // @homepageURL {{ site.url }}{{site.baseurl}}
-  // @icon        {{ site.url }}{{site.baseurl}}{{ "/assets/logo/letters_logo.svg" | relative_url }}
+  // @icon        {{ site.url }}{{ "/assets/logo/letters_logo.svg" | relative_url }}
   // @run-at      document-end
   // ==/UserScript==
 
