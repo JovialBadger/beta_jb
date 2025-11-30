@@ -102,6 +102,7 @@
       enableFullscreen: true,
       enableMetadataPanel: false,
       enableRotation: true,
+      enableDefaultVideoControls: true,
       loopGallery: false,
       imageAutoAdvance: true,
       imageDelayMs: 30000,
@@ -224,6 +225,7 @@
         enableFullscreen: options.enableFullscreen,
         enableMetadataPanel: options.enableMetadataPanel,
         enableRotation: options.enableRotation,
+        enableDefaultVideoControls: options.enableDefaultVideoControls,
         loopGallery: options.loopGallery,
         imageAutoAdvance: options.imageAutoAdvance,
         imageDelayMs: options.imageDelayMs,
@@ -510,7 +512,9 @@
     .mg-media video.mg-media-content { background: #000; }
     .mg-iframe-wrap { width: 100%; height: 100%; }
     .mg-iframe-wrap iframe { width: 100%; height: 100%; border: 0; }
-    .mg-prev, .mg-next{display:none;}
+    /*.mg-prev, .mg-next{display:none;}*/
+    .mg-frame-left, .mg-frame-right ,.mg-mute{display:none;}
+    .mg-toolbar.mg-vid-controls .mg-frame-left, .mg-toolbar.mg-vid-controls .mg-frame-right, .mg-toolbar.mg-vid-controls .mg-mute{display:block;}
     .mg-toolbar {
       position: absolute;
       left: 3px;
@@ -712,17 +716,20 @@
       const toolbar = document.createElement('div');
       toolbar.className = 'mg-toolbar';
       toolbar.innerHTML = `
-      <button class="mg-prev" title="Previous (←)">←</button>
-      <button class="mg-next" title="Next (→)">→</button>
       <button class="mg-rotate-left" title="Rotate left">⟲</button>
       <button class="mg-rotate-right" title="Rotate right">⟳</button>
-      <button class="mg-play" title="Play/Pause">Play</button>
-      <button class="mg-download" title="Download">Download</button>
-      <button class="mg-fullscreen" title="Fullscreen">Fullscreen</button>
-      <button class="mg-share" title="Share link">Share</button>
+      <button class="mg-prev" title="Previous (←)">←</button>
+      <button class="mg-frame-left" title="Frame skip left">◁</button>
+      <button class="mg-play" title="Play/Pause">▶︎</button>
+      <button class="mg-frame-right" title="Frame skip right">▷</button>
+      <button class="mg-next" title="Next (→)">→</button>
+      <button class="mg-mute" title="Mute Toggle">🔈</button>
+      <button class="mg-download" title="Download">🡣</button>
+      <button class="mg-fullscreen" title="Fullscreen">⛶</button>
+      <button class="mg-share" title="Share link">🔗</button>
       <span class="mg-spacer"></span>
 
-      <button class="mg-settings-btn" title="Settings">Settings</button>
+      <button class="mg-settings-btn" title="Settings">⚙</button>
     `;//<span class="mg-idx"></span>
       media.appendChild(toolbar);
 
@@ -769,6 +776,9 @@
       toolbar.querySelector('.mg-rotate-left').addEventListener('click', () => rotate(-90));
       toolbar.querySelector('.mg-rotate-right').addEventListener('click', () => rotate(90));
       toolbar.querySelector('.mg-play').addEventListener('click', togglePlayPause);
+      toolbar.querySelector('.mg-mute').addEventListener('click', toggleMute);
+      toolbar.querySelector('.mg-frame-left').addEventListener('click', frameStep('-'));
+      toolbar.querySelector('.mg-frame-right').addEventListener('click', frameStep);
       toolbar.querySelector('.mg-download').addEventListener('click', onDownload);
       toolbar.querySelector('.mg-fullscreen').addEventListener('click', onFullscreen);
       toolbar.querySelector('.mg-share').addEventListener('click', onShare);
@@ -909,6 +919,8 @@
       if (!mediaEl || !panelEl || !toolbarEl) return;
       const item = currentItem();
       mediaEl.querySelectorAll('.mg-media-content, .mg-iframe-wrap').forEach(n => n.remove());
+      toolbarEl.classList.remove('mg-vid-controls');
+
 
       let node;
       if (item.type === 'image') {
@@ -922,11 +934,14 @@
         });
         node = img;
       } else if (item.type === 'video') {
+        toolbarEl.classList.add('mg-vid-controls');
         const vid = document.createElement('video');
         vid.className = 'mg-media-content';
         vid.src = item.url;
         vid.muted = !!options.videoMute;
-        vid.controls = true;
+        const muteBtn = document.querySelector('.mg-toolbar .mg-mute');
+        muteBtn.textContent = vid.muted ? '🔇' : '🔈';
+        vid.controls = !!options.enableDefaultVideoControls;//true;
         vid.playsInline = true;
         vid.style.transform = computeMediaTransform();
         if (options.videoAutoplay && (state.open || inlineContainer)) { vid.autoplay = true; vid.play().catch(() => { }); }
@@ -1024,13 +1039,13 @@
 
       // Play button state
       queryAll('.mg-play').forEach(b => {
-        b.textContent = state.playing ? 'Pause' : 'Play';
+        b.textContent = state.playing ? '⏸' : '▶︎';
         b.classList.toggle('mg-primary', state.playing);
       });
 
       // FS button label
       queryAll('.mg-fullscreen').forEach(b => {
-        if (options.enableFullscreen) b.textContent = state.fsActive ? 'Exit FS' : 'Fullscreen';
+        if (options.enableFullscreen) b.textContent = state.fsActive ? 'Exit FS' : '⛶';
       });
 
       // Idle class
@@ -1091,11 +1106,11 @@
     function next(rev = false) {
       if (options.order === 'backwards' && !rev) { prev(true); return; }
       if (options.order === 'random') { goToRandomImage(); return; }
+      if (!options.loopGallery && state.currentIndex === state.orderMap.length - 1) { return; }
       state.rotationDeg = 0;
       state.videoLoopCounter = 0;
       if (state.currentIndex < state.orderMap.length - 1) state.currentIndex++;
       else if (options.loopGallery) state.currentIndex = 0;
-      if (!options.loopGallery && state.currentIndex === state.orderMap.length - 1) { return; }
       renderAll();
     }
     function rotate(delta) {
@@ -1113,6 +1128,23 @@
       const vids = document.querySelectorAll('.mg-media video.mg-media-content');
       vids.forEach(v => { if (state.playing && options.videoAutoplay) v.play().catch(() => { }); else v.pause(); });
       updateToolbarStates();
+    }
+    function toggleMute(mute = '-') {
+      const vids = document.querySelectorAll('.mg-media video.mg-media-content');
+      const muteBtn = document.querySelector('.mg-toolbar .mg-mute');
+      vids.forEach(v => { 
+        v.muted = !v.muted;
+        if(mute !== '-'){v.muted = !!mute;}
+        muteBtn.textContent = v.muted ? '🔇' : '🔈';
+      });
+    }
+    function frameStep(dir = '+') {
+      togglePlayPause("Pause");
+      state.playing = !state.playing;
+      const vids = document.querySelectorAll('.mg-media video.mg-media-content');
+      vids.forEach(v => { 
+        v.currentTime = Math.max(0, v.currentTime + (10 * (dir == '-' ? -1 : 1)));
+      });
     }
 
     let playingOnHide = false;
@@ -1282,6 +1314,7 @@
         ['videoMute', 'Mute video'],
         ['videoAutoAdvance', 'Auto-advance after video'],
         ['enableRotation', 'Rotation available'],
+        ['enableDefaultVideoControls', 'Default Video Controls'],
         ['hideThumbnails', 'Hide thumbnails'],
         ['addOpenButtonsNextToMedia', 'Open button beside original media'],
         ['enableDownload', 'Download button'],
