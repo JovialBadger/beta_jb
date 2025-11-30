@@ -1143,7 +1143,7 @@
       state.playing = !state.playing;
       const vids = document.querySelectorAll('.mg-media video.mg-media-content');
       vids.forEach(v => { 
-        v.currentTime = Math.max(0, v.currentTime + (10 * (dir == '-' ? -1 : 1)));
+        v.currentTime = Math.max(0, v.currentTime + ((1/30) * (dir == '-' ? -1 : 1)));
       });
     }
 
