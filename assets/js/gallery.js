@@ -777,7 +777,7 @@
       toolbar.querySelector('.mg-rotate-right').addEventListener('click', () => rotate(90));
       toolbar.querySelector('.mg-play').addEventListener('click', togglePlayPause);
       toolbar.querySelector('.mg-mute').addEventListener('click', toggleMute);
-      toolbar.querySelector('.mg-frame-left').addEventListener('click', frameStep('-'));
+      toolbar.querySelector('.mg-frame-left').addEventListener('click', () => frameStep('-'));
       toolbar.querySelector('.mg-frame-right').addEventListener('click', frameStep);
       toolbar.querySelector('.mg-download').addEventListener('click', onDownload);
       toolbar.querySelector('.mg-fullscreen').addEventListener('click', onFullscreen);
