@@ -1133,9 +1133,9 @@
       const vids = document.querySelectorAll('.mg-media video.mg-media-content');
       const muteBtn = document.querySelector('.mg-toolbar .mg-mute');
       vids.forEach(v => { 
-        v.muted = !v.muted;
-        if(mute !== '-'){v.muted = !!mute;}
-        muteBtn.textContent = v.muted ? '🔇' : '🔈';
+        const muted = mute !== '-' ? !!mute : !v.muted;
+        v.muted = muted;
+        muteBtn.textContent = muted ? '🔇' : '🔈';
       });
     }
     function frameStep(dir = '+') {
@@ -1245,7 +1245,7 @@
       dom.toggleBtn.style.display = 'none';
       dom.toggleBtn.textContent = 'Close gallery';
       if (focusOverlay) dom.overlay.focus?.();
-      renderAll();
+      //renderAll();
       resetIdle();
     }
     function closeGallery() {
