@@ -697,6 +697,7 @@
       header.innerHTML = `
       <div class="mg-title">Media Gallery</div>
       <span class="mg-idx"></span>
+      <span class="mg-vid-time"></span>
       <div>
         <button class="mg-close" title="Close gallery">Exit</button>
       </div>`;
@@ -920,7 +921,7 @@
       const item = currentItem();
       mediaEl.querySelectorAll('.mg-media-content, .mg-iframe-wrap').forEach(n => n.remove());
       toolbarEl.classList.remove('mg-vid-controls');
-
+      document.querySelector('.mg-vid-time').textContent = ``;
 
       let node;
       if (item.type === 'image') {
@@ -956,7 +957,11 @@
           }
         });
         vid.addEventListener('loadedmetadata', () => {
+          displayVideoTime(vid);
           if (options.enableMetadataPanel) updatePanel(panelEl, item, { width: vid.videoWidth, height: vid.videoHeight, duration: vid.duration });
+        });
+        vid.addEventListener('timeupdate', ()=>{
+          displayVideoTime(vid);
         });
         node = vid;
       } else if (item.type === 'youtube') {
@@ -1092,6 +1097,19 @@
       state.rotationDeg = 0;
       state.videoLoopCounter = 0;
       renderAll();
+    }
+
+    function fmtTime(sec) {
+      if (!Number.isFinite(sec)) return '0:00';
+      const m = Math.floor(sec / 60), s = Math.floor(sec % 60).toString().padStart(2, '0');
+      return `${m}:${s}`;
+    }
+
+    function displayVideoTime(vid = null) {
+      if (!vid || vid.paused) return;
+      const current = fmtTime(vid.currentTime);
+      const total = fmtTime(vid.duration) || 0;
+      document.querySelector('.mg-vid-time').textContent = `${current} / ${total}`;
     }
 
     function prev(rev = false) {
