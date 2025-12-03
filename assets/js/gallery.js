@@ -3,7 +3,7 @@
   // ==UserScript==
   // @name        JB_Script_Media-Gallery
   // @description Media Gallery (single-function, vanilla JS)
-  // @version     0.1
+  // @version     0.1.1
   // @namespace   Jovial-Badger_Scripts
   // @match       *://*/*
   // @grant       none
@@ -350,6 +350,232 @@
     function setShareIndexInURL(i) { if (!options.enableShare) return; const base = location.href.replace(location.hash, ''); const newHash = `#gallery=${i}`; history.replaceState(null, '', base + newHash); }
     function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
     function queryAll(sel) { return Array.from(document.querySelectorAll(sel)); }
+
+
+    
+    function videoScrubber(options = {}) {
+      const {
+        videoSelector = 'video',
+        previewSize = { width: 120, height: 90 },
+        thumbInterval = 5, // seconds between thumbnails
+      } = options;
+
+      const galleryMedia = document.querySelector('.mg-media');
+      const video = galleryMedia.querySelector(videoSelector);
+      if (!video || !(video instanceof HTMLVideoElement)) return;
+
+      // Inject styles
+      if (!document.getElementById('vs-styles')) {
+        const style = document.createElement('style');
+        style.id = 'vs-styles';
+        style.textContent = `
+          .vs-container {
+            position: relative;
+            width: 100%;
+            margin-top: 10px;
+          }
+          .vs-scrubber {
+            width: 100%;
+            height: 6px;
+            background: #333;
+            border-radius: 3px;
+            cursor: pointer;
+            position: relative;
+            overflow: visible;
+          }
+          .vs-progress {
+            height: 100%;
+            background: var(--mg-accent, #4ea1ff);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.1s linear;
+          }
+          .vs-preview {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            background: #000;
+            border: 1px solid #555;
+            border-radius: 4px;
+            overflow: hidden;
+            display: none;
+            z-index: 10;
+            pointer-events: none;
+          }
+          .vs-preview.vs-show {
+            display: block;
+          }
+          .vs-preview canvas {
+            display: block;
+          }
+          .vs-time {
+            position: absolute;
+            top: -25px;
+            left: 0;
+            font-size: 12px;
+            color: #aaa;
+            background: rgba(0,0,0,0.8);
+            padding: 2px 6px;
+            border-radius: 3px;
+            white-space: nowrap;
+          }
+        `;
+        document.head.appendChild(style);
+      }
+      
+      const tempID = video.id + "_clonePreview";
+      const prevTempVid = document.querySelector('#' + tempID);
+      if(prevTempVid) prevTempVid.remove();
+
+      const tempVid = video.cloneNode(true);
+      tempVid.id = tempID;
+      tempVid.muted = true;
+      tempVid.style.display = 'none';
+      document.body.appendChild(tempVid);
+
+      const prevContainer = document.querySelector('.mg-body').querySelector('.vs-container');
+      if(prevContainer) prevContainer.remove();
+      // Build DOM
+      const container = document.createElement('div');
+      container.className = 'vs-container';
+      container.innerHTML = `
+        <div class="vs-scrubber">
+          <div class="vs-progress"></div>
+          <div class="vs-preview">
+            <canvas></canvas>
+            <div class="vs-time"></div>
+          </div>
+        </div>
+      `;
+      document.querySelector('.mg-body').prepend(container);
+      //video.parentElement.insertBefore(container, video.nextSibling);
+
+      const scrubber = container.querySelector('.vs-scrubber');
+      const progress = container.querySelector('.vs-progress');
+      const preview = container.querySelector('.vs-preview');
+      const canvas = container.querySelector('canvas');
+      const timeDisplay = container.querySelector('.vs-time');
+      const ctx = canvas.getContext('2d');
+
+      canvas.width = previewSize.width;
+      canvas.height = previewSize.height;
+
+      let thumbnails = [];
+      //let isHovering = false;
+
+
+      function showPreview(time, pageX) {
+        if (!isFinite(time)) return;
+        try {
+          tempVid.currentTime = time;
+          tempVid.onseeked = () => {
+            try {
+              ctx.clearRect(0, 0, canvas.width, canvas.height);
+              ctx.drawImage(tempVid, 0, 0, canvas.width, canvas.height);
+              // position preview relative to wrapper
+              const wrapRect = container.getBoundingClientRect();
+              const sendondHalf = (time / tempVid.duration) > 0.5;
+              const x = clamp((pageX - (sendondHalf ? canvas.width : 0)) - wrapRect.left, 40, wrapRect.width - 40);
+              preview.style.left = x + 'px'; 
+              
+              preview.style.display = 'block';
+            } catch (e) {
+              preview.style.display = 'none';
+            }
+          };
+        } catch (e) { preview.style.display = 'none'; }
+      }
+      function hidePreview() {preview.style.display = 'none'; }
+
+
+
+      // Generate thumbnails
+      video.addEventListener('loadedmetadata', () => {
+        return;
+        const duration = video.duration;
+        const count = Math.ceil(duration / thumbInterval);
+        let loaded = 0;
+
+        for (let i = 0; i < count; i++) {
+          const time = i * thumbInterval;
+          const tempVid = document.createElement('video');
+          tempVid.src = video.src;
+          tempVid.currentTime = time;
+          tempVid.addEventListener('seeked', () => {
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = previewSize.width;
+            tempCanvas.height = previewSize.height;
+            const tempCtx = tempCanvas.getContext('2d');
+            tempCtx.drawImage(tempVid, 0, 0, previewSize.width, previewSize.height);
+            thumbnails.push({ time, data: tempCanvas.toDataURL() });
+            loaded++;
+          }, { once: true });
+        }
+      });
+
+      // Update progress bar on playback
+      video.addEventListener('timeupdate', () => {
+        const percent = (video.currentTime / video.duration) * 100;
+        progress.style.width = percent + '%';
+      });
+
+      
+      //let hoverPreview = false;
+      scrubber.addEventListener('mousemove', (ev) => {
+        //hoverPreview = true;
+        const rect = scrubber.getBoundingClientRect();
+        const ratio = clamp((ev.clientX - rect.left) / rect.width, 0, 1);
+        const t = (video.duration || 0) * ratio;
+        showPreview(t, ev.clientX);
+      });
+      scrubber.addEventListener('mouseleave', () => { 
+        //hoverPreview = false; 
+        hidePreview(); 
+      });
+
+      // Scrubber interactions
+      scrubber.addEventListener('mousemove', (e) => {
+        return;
+        if (!video.duration) return;
+        isHovering = true;
+
+        const rect = scrubber.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percent = x / rect.width;
+        const time = percent * video.duration;
+
+        preview.style.left = (x - previewSize.width / 2) + 'px';
+        preview.classList.add('vs-show');
+        timeDisplay.textContent = fmtTime(time);
+
+        // Draw nearest thumbnail or frame
+        const nearest = thumbnails.reduce((prev, curr) => 
+          Math.abs(curr.time - time) < Math.abs(prev.time - time) ? curr : prev
+        );
+
+        if (nearest) {
+          const img = new Image();
+          img.src = nearest.data;
+          img.onload = () => ctx.drawImage(img, 0, 0);
+        }
+      });
+
+      scrubber.addEventListener('mouseleave', () => {
+        return;
+        isHovering = false;
+        preview.classList.remove('vs-show');
+      });
+
+      scrubber.addEventListener('click', (e) => {
+        if (!video.duration) return;
+        const rect = scrubber.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const percent = x / rect.width;
+        video.currentTime = percent * video.duration;
+      });
+    }
+
+    // Usage: videoScrubber({ videoSelector: '.mg-media video' });
 
     // --------- Styles (patched) ----------
     function injectStyles() {
@@ -923,6 +1149,9 @@
       toolbarEl.classList.remove('mg-vid-controls');
       document.querySelector('.mg-vid-time').textContent = ``;
 
+      const prevContainer = document.querySelector('.mg-body').querySelector('.vs-container');
+      if(prevContainer) prevContainer.remove();
+
       let node;
       if (item.type === 'image') {
         const img = document.createElement('img');
@@ -995,7 +1224,7 @@
         node = img;
       }
       mediaEl.appendChild(node);
-
+videoScrubber({ videoSelector: '.mg-media video' });
       // Auto-advance images when playing
       clearTimeout(_imgTimer);
       if (item.type === 'image' && state.playing && options.imageAutoAdvance) {
