@@ -859,7 +859,7 @@ function detectType(url, sourceEl) {
     .mg-setting { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
     .mg-setting label { font-size: 12px; color: var(--mg-fg); }
     .mg-setting input[type="number"] { width: 100px; }
-    .mg-settings .mg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center; }
+    .mg-settings .mg-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; align-items: center;max-height: 50%;overflow: auto;}
 
     .mg-idle .mg-header,
     .mg-idle .mg-toolbar,
@@ -937,7 +937,7 @@ function detectType(url, sourceEl) {
       // Settings with close button (FIX: close from settings)
       const settings = document.createElement('div');
       settings.className = 'mg-settings';
-      settings.innerHTML = `<button class="mg-close-settings" title="Close settings" style="float:right;">✕</button>`;
+      settings.innerHTML = `<button class="mg-close-settings" title="Close settings" style="width:100%;">Close Settings</button>`;
       settings.querySelector('.mg-close-settings').addEventListener('click', () => {
         settings.classList.remove('mg-open');
       });
