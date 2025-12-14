@@ -184,207 +184,695 @@
   // (version 2, ECC level L-like behaviour; not production-grade but fine for short URLs).
   // Encodes input in byte mode and draws modules as <rect>s.
 
-  function makeQrSvg(text, scale) {
-    // Very small QR encoder based on a known, compact public-domain algorithm (conceptual re-implementation).
-    // To keep everything in one function, logic is inlined and heavily trimmed.
 
-    // Polynomial / Galois constants
-    const EXP_TABLE = [];
-    const LOG_TABLE = [];
-    for (let i = 0; i < 256; i++) {
-      EXP_TABLE[i] = i < 8 ? (1 << i) : 0;
-      if (i >= 8) {
-        EXP_TABLE[i] = EXP_TABLE[i - 4] ^ EXP_TABLE[i - 5] ^ EXP_TABLE[i - 6] ^ EXP_TABLE[i - 8];
+function makeQrSvg(text, scale = 4, margin = 4, ecLevel = 'M') {
+  // Minimal, self-contained QR Code generator (adapted compact implementation).
+  // Produces an SVG string. Supports automatic version selection up to version 40.
+  // ecLevel: 'L','M','Q','H'
+  // scale: pixels per module; margin: modules of quiet zone
+
+  // --- QR Math ---
+  const QRMath = (function () {
+    const EXP_TABLE = new Array(256);
+    const LOG_TABLE = new Array(256);
+    for (let i = 0; i < 8; i++) EXP_TABLE[i] = 1 << i;
+    for (let i = 8; i < 256; i++) {
+      EXP_TABLE[i] = EXP_TABLE[i - 4] ^ EXP_TABLE[i - 5] ^ EXP_TABLE[i - 6] ^ EXP_TABLE[i - 8];
+    }
+    for (let i = 0; i < 255; i++) LOG_TABLE[EXP_TABLE[i]] = i;
+    return {
+      glog: function (n) {
+        if (n < 1) throw new Error("glog(" + n + ")");
+        return LOG_TABLE[n];
+      },
+      gexp: function (n) {
+        while (n < 0) n += 255;
+        while (n >= 256) n -= 255;
+        return EXP_TABLE[n];
       }
-      LOG_TABLE[EXP_TABLE[i]] = i;
+    };
+  })();
+
+  // --- Reed-Solomon polynomial generator ---
+  function createGeneratorPolynomial(degree) {
+    let poly = [1];
+    for (let i = 0; i < degree; i++) {
+      poly = multiplyPoly(poly, [1, QRMath.gexp(i)]);
     }
-    function gexp(n) {
-      while (n < 0) n += 255;
-      while (n >= 256) n -= 255;
-      return EXP_TABLE[n];
-    }
-    function glog(n) {
-      if (n < 1) throw new Error("glog(" + n + ")");
-      return LOG_TABLE[n];
-    }
-    function rsPoly(degree) {
-      let poly = [1];
-      for (let i = 0; i < degree; i++) {
-        poly.push(0);
-        for (let j = poly.length - 1; j > 0; j--) {
-          poly[j] = poly[j - 1] ^ gexp((glog(poly[j]) + i) % 255);
-        }
-        poly[0] = gexp((glog(poly[0]) + i) % 255);
+    return poly;
+  }
+  function multiplyPoly(a, b) {
+    const result = new Array(a.length + b.length - 1).fill(0);
+    for (let i = 0; i < a.length; i++) {
+      for (let j = 0; j < b.length; j++) {
+        result[i + j] ^= multiplyGF(a[i], b[j]);
       }
-      return poly;
     }
+    return result;
+  }
+  function multiplyGF(a, b) {
+    if (a === 0 || b === 0) return 0;
+    return QRMath.gexp((QRMath.glog(a) + QRMath.glog(b)) % 255);
+  }
 
-    // Fixed version 2 parameters:
-    const size = 25; // version 2 ⇒ 25x25
-    const maxDataBytes = 34; // approximated capacity in bytes for L
-    const eccBytes = 10;     // approx RS bytes
+  // --- Bit buffer ---
+  function BitBuffer() {
+    this.buffer = [];
+    this.length = 0;
+  }
+  BitBuffer.prototype.put = function (num, length) {
+    for (let i = 0; i < length; i++) {
+      this.putBit(((num >>> (length - i - 1)) & 1) === 1);
+    }
+  };
+  BitBuffer.prototype.putBit = function (bit) {
+    const bufIndex = Math.floor(this.length / 8);
+    if (this.buffer.length <= bufIndex) this.buffer.push(0);
+    if (bit) this.buffer[bufIndex] |= (0x80 >>> (this.length % 8));
+    this.length++;
+  };
 
+  // --- QR RS Block table and helpers (data capacity) ---
+  // Data from QR spec: [version][ecLevel] => array of RS blocks (count, dataCount)
+  const RS_BLOCK_TABLE = (function () {
+    // Only include necessary table entries for versions 1..40 and EC levels L,M,Q,H
+    // Each entry: [ [count, dataCount], ... ]
+    // Source: QR Code specification (condensed)
+    // For brevity and reliability, include full table as numeric arrays (copied from standard tables).
+    // Table format: version index 1..40, each has 4 arrays for L,M,Q,H.
+    const table = [
+      /* v1 */ [
+        [1, 19], [1, 16], [1, 13], [1, 9]
+      ],
+      /* v2 */ [
+        [1, 34], [1, 28], [1, 22], [1, 16]
+      ],
+      /* v3 */ [
+        [1, 55], [1, 44], [2, 17], [2, 13]
+      ],
+      /* v4 */ [
+        [1, 80], [2, 32], [2, 24], [4, 9]
+      ],
+      /* v5 */ [
+        [1, 108], [2, 43], [2, 15, 2, 16], [2, 11, 2, 12]
+      ],
+      /* v6 */ [
+        [2, 68], [4, 27], [4, 19], [4, 15]
+      ],
+      /* v7 */ [
+        [2, 78], [4, 31], [2, 14, 4, 15], [4, 13, 1, 14]
+      ],
+      /* v8 */ [
+        [2, 97], [2, 38, 2, 39], [4, 18, 2, 19], [4, 14, 2, 15]
+      ],
+      /* v9 */ [
+        [2, 116], [3, 36, 2, 37], [4, 16, 4, 17], [4, 12, 4, 13]
+      ],
+      /* v10 */ [
+        [2, 68, 2, 69], [4, 43, 1, 44], [6, 19, 2, 20], [6, 15, 2, 16]
+      ],
+      /* v11 */ [
+        [4, 81], [1, 50, 4, 51], [4, 22, 4, 23], [4, 12, 4, 13, 1, 14]
+      ],
+      /* v12 */ [
+        [2, 92, 2, 93], [6, 36, 2, 37], [4, 20, 6, 21], [4, 16, 6, 17]
+      ],
+      /* v13 */ [
+        [4, 107], [8, 37, 1, 38], [8, 20, 4, 21], [12, 11, 4, 12]
+      ],
+      /* v14 */ [
+        [3, 115, 1, 116], [4, 40, 5, 41], [11, 16, 5, 17], [11, 12, 5, 13]
+      ],
+      /* v15 */ [
+        [5, 87, 1, 88], [5, 41, 5, 42], [5, 24, 7, 25], [11, 12, 7, 13]
+      ],
+      /* v16 */ [
+        [5, 98, 1, 99], [7, 45, 3, 46], [15, 19, 2, 20], [3, 15, 13, 16]
+      ],
+      /* v17 */ [
+        [1, 107, 5, 108], [10, 46, 1, 47], [1, 22, 15, 23], [2, 14, 17, 15]
+      ],
+      /* v18 */ [
+        [5, 120, 1, 121], [9, 43, 4, 44], [17, 22, 1, 23], [2, 14, 19, 15]
+      ],
+      /* v19 */ [
+        [3, 113, 4, 114], [3, 44, 11, 45], [17, 21, 4, 22], [9, 13, 16, 14]
+      ],
+      /* v20 */ [
+        [3, 107, 5, 108], [3, 41, 13, 42], [15, 24, 5, 25], [15, 15, 10, 16]
+      ],
+      /* v21 */ [
+        [4, 116, 4, 117], [17, 42], [17, 22, 6, 23], [19, 16, 6, 17]
+      ],
+      /* v22 */ [
+        [2, 111, 7, 112], [17, 46], [7, 24, 16, 25], [34, 13]
+      ],
+      /* v23 */ [
+        [4, 121, 5, 122], [4, 47, 14, 48], [11, 24, 14, 25], [16, 15, 14, 16]
+      ],
+      /* v24 */ [
+        [6, 117, 4, 118], [6, 45, 14, 46], [11, 24, 16, 25], [30, 16, 2, 17]
+      ],
+      /* v25 */ [
+        [8, 106, 4, 107], [8, 47, 13, 48], [7, 24, 22, 25], [22, 15, 13, 16]
+      ],
+      /* v26 */ [
+        [10, 114, 2, 115], [19, 46, 4, 47], [28, 22, 6, 23], [33, 16, 4, 17]
+      ],
+      /* v27 */ [
+        [8, 122, 4, 123], [22, 45, 3, 46], [8, 23, 26, 24], [12, 15, 28, 16]
+      ],
+      /* v28 */ [
+        [3, 117, 10, 118], [3, 45, 23, 46], [4, 24, 31, 25], [11, 15, 31, 16]
+      ],
+      /* v29 */ [
+        [7, 116, 7, 117], [21, 45, 7, 46], [1, 23, 37, 24], [19, 15, 26, 16]
+      ],
+      /* v30 */ [
+        [5, 115, 10, 116], [19, 47, 10, 48], [15, 24, 25, 25], [23, 15, 25, 16]
+      ],
+      /* v31 */ [
+        [13, 115, 3, 116], [2, 46, 29, 47], [42, 24, 1, 25], [23, 15, 28, 16]
+      ],
+      /* v32 */ [
+        [17, 115], [10, 46, 23, 47], [10, 24, 35, 25], [19, 15, 35, 16]
+      ],
+      /* v33 */ [
+        [17, 115, 1, 116], [14, 46, 21, 47], [29, 24, 19, 25], [11, 15, 46, 16]
+      ],
+      /* v34 */ [
+        [13, 115, 6, 116], [14, 46, 23, 47], [44, 24, 7, 25], [59, 16, 1, 17]
+      ],
+      /* v35 */ [
+        [12, 121, 7, 122], [12, 47, 26, 48], [39, 24, 14, 25], [22, 15, 41, 16]
+      ],
+      /* v36 */ [
+        [6, 121, 14, 122], [6, 47, 34, 48], [46, 24, 10, 25], [2, 15, 64, 16]
+      ],
+      /* v37 */ [
+        [17, 122, 4, 123], [29, 46, 14, 47], [49, 24, 10, 25], [24, 15, 46, 16]
+      ],
+      /* v38 */ [
+        [4, 122, 18, 123], [13, 46, 32, 47], [48, 24, 14, 25], [42, 15, 32, 16]
+      ],
+      /* v39 */ [
+        [20, 117, 4, 118], [40, 47, 7, 48], [43, 24, 22, 25], [10, 15, 67, 16]
+      ],
+      /* v40 */ [
+        [19, 118, 6, 119], [18, 47, 31, 48], [34, 24, 34, 25], [20, 15, 61, 16]
+      ]
+    ];
+    return table;
+  })();
+
+  function getRSBlocks(version, ecLevelChar) {
+    const ecIndex = { L: 0, M: 1, Q: 2, H: 3 }[ecLevelChar];
+    if (ecIndex === undefined) throw new Error("Invalid EC level: " + ecLevelChar);
+    const entry = RS_BLOCK_TABLE[version - 1][ecIndex];
+    // entry can be like [count,dataCount] or longer sequences
+    const blocks = [];
+    for (let i = 0; i < entry.length; i += 2) {
+      const count = entry[i];
+      const dataCount = entry[i + 1];
+      for (let j = 0; j < count; j++) blocks.push({ dataCount: dataCount });
+    }
+    return blocks;
+  }
+
+  // --- Mode and encoding (we'll use byte mode for simplicity) ---
+  function createDataBytes(version, ecLevelChar, text) {
+    // Byte mode encoding (ISO-8859-1 / UTF-8 fallback)
+    // Convert text to UTF-8 bytes
+    const encoder = new TextEncoder();
+    const data = Array.from(encoder.encode(text));
+
+    // Determine capacity: total data codewords for version/ecLevel
+    const rsBlocks = getRSBlocks(version, ecLevelChar);
+    let totalDataCount = 0;
+    for (const b of rsBlocks) totalDataCount += b.dataCount;
+
+    // Build bit buffer
+    const buffer = new BitBuffer();
+    buffer.put(0b0100, 4); // byte mode
+    // character count indicator length depends on version: 8 bits for versions 1-9, 16 for 10+
+    const ccBits = version < 10 ? 8 : 16;
+    buffer.put(data.length, ccBits);
+    for (let i = 0; i < data.length; i++) buffer.put(data[i], 8);
+
+    // Terminator
+    const maxBits = totalDataCount * 8;
+    if (buffer.length > maxBits) throw new Error("Data too long for version " + version);
+    // pad with 0s to byte boundary
+    while (buffer.length % 8 !== 0) buffer.putBit(false);
+    // pad bytes 0xec,0x11
+    const padBytes = [0xec, 0x11];
+    let i = 0;
+    while (Math.ceil(buffer.length / 8) < totalDataCount) {
+      buffer.put(padBytes[i % 2], 8);
+      i++;
+    }
+    // return array of data codewords
     const bytes = [];
-    for (let i = 0; i < text.length; i++) {
-      bytes.push(text.charCodeAt(i) & 0xff);
+    for (let i = 0; i < totalDataCount; i++) {
+      const byte = buffer.buffer[i] || 0;
+      bytes.push(byte & 0xff);
     }
-    if (bytes.length > maxDataBytes) {
-      throw new Error("Data too long for this tiny QR demo");
+    return { bytes: bytes, rsBlocks: rsBlocks };
+  }
+
+  // --- Error correction coding (Reed-Solomon) ---
+  function createCodewords(version, ecLevelChar, dataBytes, rsBlocks) {
+    // Split data bytes into block groups according to RS block structure
+    // The RS_BLOCK_TABLE entries sometimes specify groups with different data lengths.
+    // We need to reconstruct the block structure: for a given version/ecLevel, the RS_BLOCK_TABLE
+    // entries are already expanded into blocks with dataCount only (see getRSBlocks).
+    const blockCount = rsBlocks.length;
+    // Determine number of data codewords per block (some blocks may differ by 1)
+    const dataCounts = rsBlocks.map(b => b.dataCount);
+    const maxDataCount = Math.max(...dataCounts);
+    // Distribute data bytes into blocks
+    const blocks = [];
+    let offset = 0;
+    for (let i = 0; i < blockCount; i++) {
+      const dc = dataCounts[i];
+      const blockData = dataBytes.slice(offset, offset + dc);
+      offset += dc;
+      blocks.push({ data: blockData });
+    }
+    // For each block, compute ECC
+    // ECC length = total codewords per block - dataCount
+    // total codewords per block = (totalDataCount + totalEccCount) / blockCount (but easier: use RS generator degree from table)
+    // We can compute ECC length by using version/ecLevel total codewords minus data codewords.
+    const totalCodewords = getTotalCodewords(version);
+    const totalDataCodewords = dataBytes.length;
+    const totalEccCodewords = totalCodewords - totalDataCodewords;
+    const eccPerBlock = Math.floor(totalEccCodewords / blockCount);
+
+    for (let i = 0; i < blocks.length; i++) {
+      const dc = blocks[i].data.slice();
+      const ecc = reedSolomonEncode(dc, eccPerBlock);
+      blocks[i].ecc = ecc;
     }
 
-    // Byte mode header: 0100, then length (8 bits for simplicity)
-    const bits = [];
-    function putBits(val, len) {
-      for (let i = len - 1; i >= 0; i--) {
-        bits.push((val >>> i) & 1);
+    // Interleave data and ecc into final codeword sequence
+    const maxDataLen = Math.max(...blocks.map(b => b.data.length));
+    const maxEccLen = Math.max(...blocks.map(b => b.ecc.length));
+    const codewords = [];
+    for (let i = 0; i < maxDataLen; i++) {
+      for (let j = 0; j < blocks.length; j++) {
+        if (i < blocks[j].data.length) codewords.push(blocks[j].data[i]);
       }
     }
-    putBits(0x4, 4);           // byte mode
-    putBits(bytes.length, 8);  // length
-    for (let i = 0; i < bytes.length; i++) {
-      putBits(bytes[i], 8);
+    for (let i = 0; i < maxEccLen; i++) {
+      for (let j = 0; j < blocks.length; j++) {
+        if (i < blocks[j].ecc.length) codewords.push(blocks[j].ecc[i]);
+      }
     }
-    // Terminator + pad to full bytes
-    while (bits.length % 8 !== 0) bits.push(0);
-    // Pad bytes
-    const dataBytes = [];
-    for (let i = 0; i < bits.length; i += 8) {
-      dataBytes.push(
-        (bits[i] << 7) |
-        (bits[i + 1] << 6) |
-        (bits[i + 2] << 5) |
-        (bits[i + 3] << 4) |
-        (bits[i + 4] << 3) |
-        (bits[i + 5] << 2) |
-        (bits[i + 6] << 1) |
-        (bits[i + 7])
-      );
-    }
-    let padByte = 0xec;
-    while (dataBytes.length < maxDataBytes) {
-      dataBytes.push(padByte);
-      padByte = padByte === 0xec ? 0x11 : 0xec;
-    }
+    return codewords;
+  }
 
-    // Reed-Solomon ECC
-    const gen = rsPoly(eccBytes);
-    const ecc = new Array(eccBytes).fill(0);
-    for (let i = 0; i < dataBytes.length; i++) {
-      const factor = dataBytes[i] ^ ecc[0];
-      ecc.shift();
-      ecc.push(0);
+  function reedSolomonEncode(data, ecLength) {
+    const gen = createGeneratorPolynomial(ecLength);
+    const ec = new Array(ecLength).fill(0);
+    for (let i = 0; i < data.length; i++) {
+      const factor = data[i] ^ ec[0];
+      ec.shift();
+      ec.push(0);
       if (factor !== 0) {
         for (let j = 0; j < gen.length; j++) {
-          ecc[j] ^= gexp((glog(gen[j]) + glog(factor)) % 255);
+          ec[j] ^= multiplyGF(gen[j], factor);
         }
       }
     }
+    return ec;
+  }
 
-    const codewords = dataBytes.concat(ecc);
+  // --- Utility: total codewords per version (from spec) ---
+  const TOTAL_CODEWORDS_TABLE = [
+    26, 44, 70, 100, 134, 172, 196, 242, 292, 346,
+    404, 466, 532, 581, 655, 733, 815, 901, 991, 1085,
+    1156, 1258, 1364, 1474, 1588, 1706, 1828, 1921, 2051, 2185,
+    2323, 2465, 2611, 2761, 2876, 3034, 3196, 3362, 3532, 3706
+  ];
+  function getTotalCodewords(version) {
+    return TOTAL_CODEWORDS_TABLE[version - 1];
+  }
 
-    // Build module matrix
-    const modules = [];
+  // --- Matrix placement helpers ---
+  function createEmptyMatrix(size) {
+    const m = new Array(size);
     for (let r = 0; r < size; r++) {
-      modules[r] = [];
-      for (let c = 0; c < size; c++) modules[r][c] = null;
+      m[r] = new Array(size).fill(null);
     }
+    return m;
+  }
 
-    function placeFinderPattern(row, col) {
-      for (let r = -1; r <= 7; r++) {
-        for (let c = -1; c <= 7; c++) {
-          if (row + r <= -1 || size <= row + r || col + c <= -1 || size <= col + c) continue;
-          if (
-            (0 <= r && r <= 6 && (c === 0 || c === 6)) ||
-            (0 <= c && c <= 6 && (r === 0 || r === 6)) ||
-            (2 <= r && r <= 4 && 2 <= c && c <= 4)
-          ) {
-            modules[row + r][col + c] = true;
-          } else {
-            modules[row + r][col + c] = false;
-          }
+  function placeFinderPattern(matrix, r, c) {
+    for (let dr = -1; dr <= 7; dr++) {
+      for (let dc = -1; dc <= 7; dc++) {
+        const rr = r + dr;
+        const cc = c + dc;
+        if (rr < 0 || rr >= matrix.length || cc < 0 || cc >= matrix.length) continue;
+        if ((0 <= dr && dr <= 6 && (dc === 0 || dc === 6)) ||
+            (0 <= dc && dc <= 6 && (dr === 0 || dr === 6)) ||
+            (2 <= dr && dr <= 4 && 2 <= dc && dc <= 4)) {
+          matrix[rr][cc] = 1;
+        } else {
+          matrix[rr][cc] = 0;
         }
       }
     }
+  }
 
-    placeFinderPattern(0, 0);
-    placeFinderPattern(size - 7, 0);
-    placeFinderPattern(0, size - 7);
-
-    // Timing patterns
-    for (let i = 8; i < size - 8; i++) {
-      modules[6][i] = i % 2 === 0;
-      modules[i][6] = i % 2 === 0;
+  function placeAlignmentPattern(matrix, r, c) {
+    for (let dr = -2; dr <= 2; dr++) {
+      for (let dc = -2; dc <= 2; dc++) {
+        const rr = r + dr;
+        const cc = c + dc;
+        if (rr < 0 || rr >= matrix.length || cc < 0 || cc >= matrix.length) continue;
+        if (Math.max(Math.abs(dr), Math.abs(dc)) === 2 || (dr === 0 && dc === 0)) {
+          matrix[rr][cc] = 1;
+        } else {
+          matrix[rr][cc] = 0;
+        }
+      }
     }
+  }
 
-    // Reserve format info (skip for brevity; we just leave them null and then fill later)
-    function isReserved(r, c) {
-      // Finder + timing + format regions (rough approximation)
-      if (r < 9 && c < 9) return true;
-      if (r < 9 && c >= size - 8) return true;
-      if (r >= size - 8 && c < 9) return true;
-      if (r === 6 || c === 6) return true;
-      return false;
+  function getAlignmentPatternPositions(version) {
+    if (version === 1) return [];
+    const posCount = Math.floor(version / 7) + 2;
+    const size = version * 4 + 17;
+    const step = posCount === 2 ? size - 13 : Math.ceil((size - 13) / (posCount - 1));
+    const positions = [];
+    let pos = 6;
+    for (let i = 0; i < posCount - 1; i++) {
+      positions.push(pos);
+      pos += step;
     }
+    positions.push(size - 7);
+    return positions;
+  }
 
-    // Data placement (simple zigzag)
-    let dirUp = true;
+  function isReserved(matrix, r, c) {
+    // Finder areas and timing lines and format info areas
+    const size = matrix.length;
+    if (r < 9 && c < 9) return true;
+    if (r < 9 && c >= size - 8) return true;
+    if (r >= size - 8 && c < 9) return true;
+    if (r === 6 || c === 6) return true;
+    return false;
+  }
+
+  // --- Mask functions (0..7) ---
+  const MASK_FUNCS = [
+    (r, c) => (r + c) % 2 === 0,
+    (r, c) => r % 2 === 0,
+    (r, c) => c % 3 === 0,
+    (r, c) => (r + c) % 3 === 0,
+    (r, c) => (Math.floor(r / 2) + Math.floor(c / 3)) % 2 === 0,
+    (r, c) => ((r * c) % 2) + ((r * c) % 3) === 0,
+    (r, c) => (((r * c) % 2) + ((r * c) % 3)) % 2 === 0,
+    (r, c) => (((r + c) % 2) + ((r * c) % 3)) % 2 === 0
+  ];
+
+  // --- Format bits (error correction + mask) generator ---
+  function getFormatBits(ecLevelChar, maskPattern) {
+    const ecCode = { L: 1, M: 0, Q: 3, H: 2 }[ecLevelChar];
+    let formatInfo = (ecCode << 3) | maskPattern;
+    // BCH code (15,5) generator 0x537
+    let g = formatInfo << 10;
+    const poly = 0x537;
+    for (let i = 14; i >= 10; i--) {
+      if ((g >>> i) & 1) g ^= poly << (i - 10);
+    }
+    const bits = ((formatInfo << 10) | g) ^ 0x5412;
+    return bits & 0x7fff;
+  }
+
+  // --- Version information bits (for versions >=7) ---
+  function getVersionBits(version) {
+    // BCH code (18,6) generator 0x1f25
+    let v = version << 12;
+    let g = v;
+    const poly = 0x1f25;
+    for (let i = 17; i >= 12; i--) {
+      if ((g >>> i) & 1) g ^= poly << (i - 12);
+    }
+    return ((version << 12) | g) & 0x3ffff;
+  }
+
+  // --- Place data bits into matrix ---
+  function placeDataBits(matrix, codewords) {
+    const size = matrix.length;
+    let row = size - 1;
     let col = size - 1;
+    let dirUp = true;
     let bitIndex = 0;
+    const totalBits = codewords.length * 8;
     function nextBit() {
-      if (bitIndex >= codewords.length * 8) return 0;
+      if (bitIndex >= totalBits) return 0;
       const byteIndex = Math.floor(bitIndex / 8);
       const bitInByte = 7 - (bitIndex % 8);
       bitIndex++;
       return (codewords[byteIndex] >>> bitInByte) & 1;
     }
-
     while (col > 0) {
-      if (col === 6) col--; // skip vertical timing column
+      if (col === 6) col--;
       for (let i = 0; i < size; i++) {
-        const row = dirUp ? size - 1 - i : i;
+        const r = dirUp ? size - 1 - i : i;
         for (let cOff = 0; cOff < 2; cOff++) {
           const c = col - cOff;
-          if (modules[row][c] !== null || isReserved(row, c)) continue;
-          modules[row][c] = nextBit() === 1;
+          if (matrix[r][c] !== null) continue;
+          matrix[r][c] = nextBit();
         }
       }
       col -= 2;
       dirUp = !dirUp;
     }
+  }
 
-    // Simple mask (pattern 0: (r+c) mod 2 == 0)
+  // --- Apply mask and compute penalty score ---
+  function applyMask(matrix, maskFunc) {
+    const size = matrix.length;
+    const masked = createEmptyMatrix(size);
     for (let r = 0; r < size; r++) {
       for (let c = 0; c < size; c++) {
-        if (isReserved(r, c)) continue;
-        modules[r][c] = modules[r][c] ^ ((r + c) % 2 === 0);
-      }
-    }
-
-    // For brevity, we skip actual format info bits (just reserve them as dark/light pattern)
-    // Minimal placeholder: make them visible but not standards-compliant.
-    for (let i = 0; i < 9; i++) {
-      if (modules[8][i] === null) modules[8][i] = (i % 2) === 0;
-      if (modules[i][8] === null) modules[i][8] = (i % 2) === 0;
-      if (modules[8][size - 1 - i] === null) modules[8][size - 1 - i] = (i % 2) === 0;
-      if (modules[size - 1 - i][8] === null) modules[size - 1 - i][8] = (i % 2) === 0;
-    }
-
-    // Build SVG
-    const cell = scale || 4;
-    const quiet = 4;
-    const svgSize = (size + quiet * 2) * cell;
-    let rects = "";
-    for (let r = 0; r < size; r++) {
-      for (let c = 0; c < size; c++) {
-        if (modules[r][c]) {
-          const x = (c + quiet) * cell;
-          const y = (r + quiet) * cell;
-          rects += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="#000"/>`;
+        if (matrix[r][c] === null) masked[r][c] = null;
+        else {
+          const bit = matrix[r][c];
+          masked[r][c] = maskFunc(r, c) ? (bit ^ 1) : bit;
         }
       }
     }
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgSize} ${svgSize}" shape-rendering="crispEdges">${rects}</svg>`;
+    return masked;
   }
+
+  function computePenalty(matrix) {
+    const size = matrix.length;
+    let penalty = 0;
+    // Rule 1: consecutive modules in row/col
+    for (let r = 0; r < size; r++) {
+      let runColor = matrix[r][0];
+      let runLen = 1;
+      for (let c = 1; c < size; c++) {
+        if (matrix[r][c] === runColor) runLen++;
+        else {
+          if (runLen >= 5) penalty += 3 + (runLen - 5);
+          runColor = matrix[r][c];
+          runLen = 1;
+        }
+      }
+      if (runLen >= 5) penalty += 3 + (runLen - 5);
+    }
+    for (let c = 0; c < size; c++) {
+      let runColor = matrix[0][c];
+      let runLen = 1;
+      for (let r = 1; r < size; r++) {
+        if (matrix[r][c] === runColor) runLen++;
+        else {
+          if (runLen >= 5) penalty += 3 + (runLen - 5);
+          runColor = matrix[r][c];
+          runLen = 1;
+        }
+      }
+      if (runLen >= 5) penalty += 3 + (runLen - 5);
+    }
+    // Rule 2: 2x2 blocks
+    for (let r = 0; r < size - 1; r++) {
+      for (let c = 0; c < size - 1; c++) {
+        const v = matrix[r][c];
+        if (v === matrix[r][c + 1] && v === matrix[r + 1][c] && v === matrix[r + 1][c + 1]) penalty += 3;
+      }
+    }
+    // Rule 3: patterns similar to finder pattern in rows/cols
+    const pattern1 = [1,0,1,1,1,0,1,0,0,0,0];
+    const pattern2 = [0,0,0,0,1,0,1,1,1,0,1];
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size - 10; c++) {
+        let match1 = true, match2 = true;
+        for (let k = 0; k < 11; k++) {
+          if (matrix[r][c + k] !== pattern1[k]) match1 = false;
+          if (matrix[r][c + k] !== pattern2[k]) match2 = false;
+        }
+        if (match1 || match2) penalty += 40;
+      }
+    }
+    for (let c = 0; c < size; c++) {
+      for (let r = 0; r < size - 10; r++) {
+        let match1 = true, match2 = true;
+        for (let k = 0; k < 11; k++) {
+          if (matrix[r + k][c] !== pattern1[k]) match1 = false;
+          if (matrix[r + k][c] !== pattern2[k]) match2 = false;
+        }
+        if (match1 || match2) penalty += 40;
+      }
+    }
+    // Rule 4: balance of dark modules
+    let dark = 0;
+    for (let r = 0; r < size; r++) for (let c = 0; c < size; c++) if (matrix[r][c] === 1) dark++;
+    const total = size * size;
+    const k = Math.abs(Math.floor((dark * 100 / total) - 50) / 5);
+    penalty += k * 10;
+    return penalty;
+  }
+
+  // --- Build final matrix for a given version and mask ---
+  function buildMatrix(version, ecLevelChar, codewords, maskPattern) {
+    const size = version * 4 + 17;
+    const matrix = createEmptyMatrix(size);
+    // place finder patterns
+    placeFinderPattern(matrix, 0, 0);
+    placeFinderPattern(matrix, size - 7, 0);
+    placeFinderPattern(matrix, 0, size - 7);
+    // place separators (already handled by finder pattern placement setting surrounding to 0)
+    // place timing patterns
+    for (let i = 8; i < size - 8; i++) {
+      if (matrix[6][i] === null) matrix[6][i] = (i % 2 === 0) ? 1 : 0;
+      if (matrix[i][6] === null) matrix[i][6] = (i % 2 === 0) ? 1 : 0;
+    }
+    // place alignment patterns
+    const alignPos = getAlignmentPatternPositions(version);
+    for (let i = 0; i < alignPos.length; i++) {
+      for (let j = 0; j < alignPos.length; j++) {
+        const r = alignPos[i], c = alignPos[j];
+        // skip if overlaps finder
+        if ((r === 6 && (c === 6 || c === size - 7)) || (r === size - 7 && c === 6)) continue;
+        placeAlignmentPattern(matrix, r, c);
+      }
+    }
+    // reserve format info areas (set to 0 temporarily)
+    for (let i = 0; i < 9; i++) {
+      if (matrix[8][i] === null) matrix[8][i] = 0;
+      if (matrix[i][8] === null) matrix[i][8] = 0;
+      if (matrix[8][size - 1 - i] === null) matrix[8][size - 1 - i] = 0;
+      if (matrix[size - 1 - i][8] === null) matrix[size - 1 - i][8] = 0;
+    }
+    // place version info if needed (versions >=7)
+    if (version >= 7) {
+      const vb = getVersionBits(version);
+      for (let i = 0; i < 18; i++) {
+        const bit = (vb >>> i) & 1;
+        const r = Math.floor(i / 3);
+        const c = i % 3;
+        matrix[size - 11 + c][r] = bit;
+        matrix[r][size - 11 + c] = bit;
+      }
+    }
+    // place data bits
+    placeDataBits(matrix, codewords);
+    // apply mask
+    const masked = applyMask(matrix, MASK_FUNCS[maskPattern]);
+    // place format bits
+    const formatBits = getFormatBits(ecLevelChar, maskPattern);
+    // top-left format
+    for (let i = 0; i < 8; i++) {
+      const bit = (formatBits >>> i) & 1;
+      // (8,i)
+      if (i !== 6) masked[8][i] = bit;
+      // (i,8)
+      if (i !== 6) masked[i][8] = bit;
+    }
+    // other format positions
+    for (let i = 0; i < 7; i++) {
+      const bit = (formatBits >>> (14 - i)) & 1;
+      masked[8][size - 1 - i] = bit;
+      masked[size - 1 - i][8] = bit;
+    }
+    // set dark module
+    masked[size - 8][8] = 1;
+    return masked;
+  }
+
+  // --- Choose best mask by penalty ---
+  function chooseBestMask(version, ecLevelChar, codewords) {
+    let bestMask = 0;
+    let bestScore = Infinity;
+    let bestMatrix = null;
+    for (let mask = 0; mask < 8; mask++) {
+      const matrix = buildMatrix(version, ecLevelChar, codewords, mask);
+      const score = computePenalty(matrix);
+      if (score < bestScore) {
+        bestScore = score;
+        bestMask = mask;
+        bestMatrix = matrix;
+      }
+    }
+    return { mask: bestMask, matrix: bestMatrix };
+  }
+
+  // --- Auto-select version based on data length and EC level ---
+  function selectVersionForData(text, ecLevelChar) {
+    // Try versions 1..40 and pick first that fits
+    for (let version = 1; version <= 40; version++) {
+      try {
+        const { bytes } = createDataBytes(version, ecLevelChar, text);
+        // if no exception, it fits
+        return version;
+      } catch (e) {
+        // continue
+      }
+    }
+    throw new Error("Data too long to encode in QR Code (max version 40)");
+  }
+
+  // --- Main flow: build QR matrix for text ---
+  function buildQrMatrix(text, ecLevelChar) {
+    const version = selectVersionForData(text, ecLevelChar);
+    const { bytes: dataBytes, rsBlocks } = createDataBytes(version, ecLevelChar, text);
+    const codewords = createCodewords(version, ecLevelChar, dataBytes, rsBlocks);
+    const { mask, matrix } = chooseBestMask(version, ecLevelChar, codewords);
+    return { matrix: matrix, version: version, mask: mask };
+  }
+
+  // --- Render matrix to SVG ---
+  function renderSvg(matrix, scale, margin) {
+    const size = matrix.length;
+    const moduleSize = scale;
+    const quiet = margin;
+    const svgSize = (size + quiet * 2) * moduleSize;
+    let rects = "";
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (matrix[r][c] === 1) {
+          const x = (c + quiet) * moduleSize;
+          const y = (r + quiet) * moduleSize;
+          rects += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#000"/>`;
+        }
+      }
+    }
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgSize} ${svgSize}" width="${svgSize}" height="${svgSize}" shape-rendering="crispEdges">${rects}</svg>`;
+    return svg;
+  }
+
+  // --- Execute ---
+  if (typeof text !== "string") text = String(text);
+  if (!['L','M','Q','H'].includes(ecLevel)) ecLevel = 'M';
+  // Build matrix (may throw if too long)
+  const { matrix } = buildQrMatrix(text, ecLevel);
+  return renderSvg(matrix, scale, margin);
+}
+
 
   // --- Form <> data wiring -----------------------------------------
   function loadToForm(key, cfg) {
