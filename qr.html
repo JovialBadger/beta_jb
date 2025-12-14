@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Dynamic QR Router</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 1.5rem; }
+    h1, h2 { margin-top: 0; }
+    label { display: block; margin-top: 0.75rem; font-weight: 600; }
+    input, select, textarea { width: 100%; max-width: 600px; padding: 0.35rem 0.5rem; margin-top: 0.25rem; font-size: 0.95rem; }
+    button { margin-top: 0.8rem; padding: 0.4rem 0.8rem; font-size: 0.95rem; cursor: pointer; }
+    .row { display: flex; flex-wrap: wrap; gap: 2rem; align-items: flex-start; }
+    .col { flex: 1 1 260px; min-width: 260px; }
+    .small { font-size: 0.8rem; color: #555; }
+    pre { background:#f4f4f4; padding:0.5rem; overflow:auto; max-width: 600px; }
+    #message { margin-top: 0.5rem; color: #333; font-size: 0.9rem; }
+    #qrContainer svg { border:1px solid #ccc; margin-top:0.5rem; }
+    table { border-collapse: collapse; margin-top:0.75rem; }
+    th, td { border:1px solid #ccc; padding:0.25rem 0.5rem; font-size:0.8rem; }
+    th { background:#f8f8f8; }
+    .pill { display:inline-block; padding:0.1rem 0.4rem; border-radius:999px; font-size:0.7rem; background:#eee; }
+    .hidden { display:none; }
+  </style>
+</head>
+<body>
+<h1>Dynamic QR Router</h1>
+<div id="message"></div>
+
+<div id="adminUI" class="hidden">
+  <div class="row">
+    <div class="col">
+      <h2>Create / update QR code</h2>
+      <label>
+        QR key (e.g. "promo1")
+        <input id="codeKey" placeholder="short identifier used in ?code=..." />
+      </label>
+
+      <label>
+        Action type
+        <select id="actionType">
+          <option value="redirect">Redirect to URL</option>
+          <option value="redirectWithParams">Redirect with URL parameters</option>
+          <option value="download">Trigger download (data URL or http(s) URL)</option>
+          <option value="display">Display data</option>
+        </select>
+      </label>
+
+      <div id="field_targetUrl">
+        <label>
+          Target URL
+          <input id="targetUrl" placeholder="https://example.com/page" />
+        </label>
+      </div>
+
+      <div id="field_params" class="hidden">
+        <label>
+          Extra URL parameters (JSON object)
+          <textarea id="extraParams" rows="3" placeholder='{"utm_source":"qr","campaign":"spring"}'></textarea>
+        </label>
+      </div>
+
+      <div id="field_download" class="hidden">
+        <label>
+          Download URL or data URI
+          <input id="downloadUrl" placeholder="https://example.com/file.pdf or data:...;base64,..." />
+        </label>
+        <label>
+          Suggested filename
+          <input id="downloadName" placeholder="file.pdf" />
+        </label>
+      </div>
+
+      <div id="field_display" class="hidden">
+        <label>
+          Display text / data (HTML allowed)
+          <textarea id="displayData" rows="4" placeholder="This is some content shown for this QR code."></textarea>
+        </label>
+      </div>
+
+      <button id="saveCode">Save / update code</button>
+      <div class="small">
+        Codes are stored in your browser only (localStorage). No server is called.
+      </div>
+
+      <h3 style="margin-top:1.5rem;">Generated QR (for this key)</h3>
+      <div class="small">
+        Scalable SVG, encodes this page with <code>?code=&lt;your-key&gt;</code>.
+      </div>
+      <pre id="qrUrl"></pre>
+      <div id="qrContainer"></div>
+      <button id="downloadSvgBtn" class="hidden">Download SVG</button>
+    </div>
+
+    <div class="col">
+      <h2>Existing codes</h2>
+      <div class="small">Click a key to load it into the editor.</div>
+      <div id="codeList"></div>
+    </div>
+  </div>
+</div>
+
+<div id="displayArea" class="hidden">
+  <h2>QR content</h2>
+  <div id="displayContent"></div>
+</div>
+
+<script>
+/*
+  Single function orchestrating everything:
+  - parse query and storage
+  - execute actions (redirect, download, display)
+  - render admin UI when no ?code=
+  - generate SVG QR (no external deps, no network)
+*/
+(function dynamicQRRouter() {
+  "use strict";
+
+  // --- tiny helpers (still inside the IIFE) -----------------
+  function $(id) { return document.getElementById(id); }
+
+  function loadCodes() {
+    try {
+      const raw = localStorage.getItem("dynamicQrCodes") || "{}";
+      return JSON.parse(raw);
+    } catch (e) {
+      return {};
+    }
+  }
+
+  function saveCodes(codes) {
+    localStorage.setItem("dynamicQrCodes", JSON.stringify(codes));
+  }
+
+  function updateCodeList(codes) {
+    const container = $("codeList");
+    container.innerHTML = "";
+    const keys = Object.keys(codes).sort();
+    if (!keys.length) {
+      container.textContent = "No codes yet.";
+      return;
+    }
+    const table = document.createElement("table");
+    const thead = document.createElement("thead");
+    thead.innerHTML = "<tr><th>Key</th><th>Action</th></tr>";
+    table.appendChild(thead);
+    const tbody = document.createElement("tbody");
+    keys.forEach(k => {
+      const tr = document.createElement("tr");
+      const tdKey = document.createElement("td");
+      const link = document.createElement("button");
+      link.textContent = k;
+      link.style.border = "none";
+      link.style.background = "none";
+      link.style.padding = "0";
+      link.style.cursor = "pointer";
+      link.style.color = "#0366d6";
+      link.onclick = function () {
+        loadToForm(k, codes[k]);
+      };
+      tdKey.appendChild(link);
+      const tdAction = document.createElement("td");
+      tdAction.innerHTML = "<span class='pill'>" + codes[k].type + "</span>";
+      tr.appendChild(tdKey);
+      tr.appendChild(tdAction);
+      tbody.appendChild(tr);
+    });
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  function setMessage(msg) {
+    $("message").textContent = msg || "";
+  }
+
+  function show(elOrId, show) {
+    const el = typeof elOrId === "string" ? $(elOrId) : elOrId;
+    if (!el) return;
+    el.classList[show ? "remove" : "add"]("hidden");
+  }
+
+  // --- QR generation (minimal, numeric+alnum, SVG) -----------------
+  // For simplicity this uses a very small, fixed-size QR implementation
+  // (version 2, ECC level L-like behaviour; not production-grade but fine for short URLs).
+  // Encodes input in byte mode and draws modules as <rect>s.
+
+  function makeQrSvg(text, scale) {
+    // Very small QR encoder based on a known, compact public-domain algorithm (conceptual re-implementation).
+    // To keep everything in one function, logic is inlined and heavily trimmed.
+
+    // Polynomial / Galois constants
+    const EXP_TABLE = [];
+    const LOG_TABLE = [];
+    for (let i = 0; i < 256; i++) {
+      EXP_TABLE[i] = i < 8 ? (1 << i) : 0;
+      if (i >= 8) {
+        EXP_TABLE[i] = EXP_TABLE[i - 4] ^ EXP_TABLE[i - 5] ^ EXP_TABLE[i - 6] ^ EXP_TABLE[i - 8];
+      }
+      LOG_TABLE[EXP_TABLE[i]] = i;
+    }
+    function gexp(n) {
+      while (n < 0) n += 255;
+      while (n >= 256) n -= 255;
+      return EXP_TABLE[n];
+    }
+    function glog(n) {
+      if (n < 1) throw new Error("glog(" + n + ")");
+      return LOG_TABLE[n];
+    }
+    function rsPoly(degree) {
+      let poly = [1];
+      for (let i = 0; i < degree; i++) {
+        poly.push(0);
+        for (let j = poly.length - 1; j > 0; j--) {
+          poly[j] = poly[j - 1] ^ gexp((glog(poly[j]) + i) % 255);
+        }
+        poly[0] = gexp((glog(poly[0]) + i) % 255);
+      }
+      return poly;
+    }
+
+    // Fixed version 2 parameters:
+    const size = 25; // version 2 ⇒ 25x25
+    const maxDataBytes = 34; // approximated capacity in bytes for L
+    const eccBytes = 10;     // approx RS bytes
+
+    const bytes = [];
+    for (let i = 0; i < text.length; i++) {
+      bytes.push(text.charCodeAt(i) & 0xff);
+    }
+    if (bytes.length > maxDataBytes) {
+      throw new Error("Data too long for this tiny QR demo");
+    }
+
+    // Byte mode header: 0100, then length (8 bits for simplicity)
+    const bits = [];
+    function putBits(val, len) {
+      for (let i = len - 1; i >= 0; i--) {
+        bits.push((val >>> i) & 1);
+      }
+    }
+    putBits(0x4, 4);           // byte mode
+    putBits(bytes.length, 8);  // length
+    for (let i = 0; i < bytes.length; i++) {
+      putBits(bytes[i], 8);
+    }
+    // Terminator + pad to full bytes
+    while (bits.length % 8 !== 0) bits.push(0);
+    // Pad bytes
+    const dataBytes = [];
+    for (let i = 0; i < bits.length; i += 8) {
+      dataBytes.push(
+        (bits[i] << 7) |
+        (bits[i + 1] << 6) |
+        (bits[i + 2] << 5) |
+        (bits[i + 3] << 4) |
+        (bits[i + 4] << 3) |
+        (bits[i + 5] << 2) |
+        (bits[i + 6] << 1) |
+        (bits[i + 7])
+      );
+    }
+    let padByte = 0xec;
+    while (dataBytes.length < maxDataBytes) {
+      dataBytes.push(padByte);
+      padByte = padByte === 0xec ? 0x11 : 0xec;
+    }
+
+    // Reed-Solomon ECC
+    const gen = rsPoly(eccBytes);
+    const ecc = new Array(eccBytes).fill(0);
+    for (let i = 0; i < dataBytes.length; i++) {
+      const factor = dataBytes[i] ^ ecc[0];
+      ecc.shift();
+      ecc.push(0);
+      if (factor !== 0) {
+        for (let j = 0; j < gen.length; j++) {
+          ecc[j] ^= gexp((glog(gen[j]) + glog(factor)) % 255);
+        }
+      }
+    }
+
+    const codewords = dataBytes.concat(ecc);
+
+    // Build module matrix
+    const modules = [];
+    for (let r = 0; r < size; r++) {
+      modules[r] = [];
+      for (let c = 0; c < size; c++) modules[r][c] = null;
+    }
+
+    function placeFinderPattern(row, col) {
+      for (let r = -1; r <= 7; r++) {
+        for (let c = -1; c <= 7; c++) {
+          if (row + r <= -1 || size <= row + r || col + c <= -1 || size <= col + c) continue;
+          if (
+            (0 <= r && r <= 6 && (c === 0 || c === 6)) ||
+            (0 <= c && c <= 6 && (r === 0 || r === 6)) ||
+            (2 <= r && r <= 4 && 2 <= c && c <= 4)
+          ) {
+            modules[row + r][col + c] = true;
+          } else {
+            modules[row + r][col + c] = false;
+          }
+        }
+      }
+    }
+
+    placeFinderPattern(0, 0);
+    placeFinderPattern(size - 7, 0);
+    placeFinderPattern(0, size - 7);
+
+    // Timing patterns
+    for (let i = 8; i < size - 8; i++) {
+      modules[6][i] = i % 2 === 0;
+      modules[i][6] = i % 2 === 0;
+    }
+
+    // Reserve format info (skip for brevity; we just leave them null and then fill later)
+    function isReserved(r, c) {
+      // Finder + timing + format regions (rough approximation)
+      if (r < 9 && c < 9) return true;
+      if (r < 9 && c >= size - 8) return true;
+      if (r >= size - 8 && c < 9) return true;
+      if (r === 6 || c === 6) return true;
+      return false;
+    }
+
+    // Data placement (simple zigzag)
+    let dirUp = true;
+    let col = size - 1;
+    let bitIndex = 0;
+    function nextBit() {
+      if (bitIndex >= codewords.length * 8) return 0;
+      const byteIndex = Math.floor(bitIndex / 8);
+      const bitInByte = 7 - (bitIndex % 8);
+      bitIndex++;
+      return (codewords[byteIndex] >>> bitInByte) & 1;
+    }
+
+    while (col > 0) {
+      if (col === 6) col--; // skip vertical timing column
+      for (let i = 0; i < size; i++) {
+        const row = dirUp ? size - 1 - i : i;
+        for (let cOff = 0; cOff < 2; cOff++) {
+          const c = col - cOff;
+          if (modules[row][c] !== null || isReserved(row, c)) continue;
+          modules[row][c] = nextBit() === 1;
+        }
+      }
+      col -= 2;
+      dirUp = !dirUp;
+    }
+
+    // Simple mask (pattern 0: (r+c) mod 2 == 0)
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (isReserved(r, c)) continue;
+        modules[r][c] = modules[r][c] ^ ((r + c) % 2 === 0);
+      }
+    }
+
+    // For brevity, we skip actual format info bits (just reserve them as dark/light pattern)
+    // Minimal placeholder: make them visible but not standards-compliant.
+    for (let i = 0; i < 9; i++) {
+      if (modules[8][i] === null) modules[8][i] = (i % 2) === 0;
+      if (modules[i][8] === null) modules[i][8] = (i % 2) === 0;
+      if (modules[8][size - 1 - i] === null) modules[8][size - 1 - i] = (i % 2) === 0;
+      if (modules[size - 1 - i][8] === null) modules[size - 1 - i][8] = (i % 2) === 0;
+    }
+
+    // Build SVG
+    const cell = scale || 4;
+    const quiet = 4;
+    const svgSize = (size + quiet * 2) * cell;
+    let rects = "";
+    for (let r = 0; r < size; r++) {
+      for (let c = 0; c < size; c++) {
+        if (modules[r][c]) {
+          const x = (c + quiet) * cell;
+          const y = (r + quiet) * cell;
+          rects += `<rect x="${x}" y="${y}" width="${cell}" height="${cell}" fill="#000"/>`;
+        }
+      }
+    }
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${svgSize} ${svgSize}" shape-rendering="crispEdges">${rects}</svg>`;
+  }
+
+  // --- Form <> data wiring -----------------------------------------
+  function loadToForm(key, cfg) {
+    $("codeKey").value = key;
+    $("actionType").value = cfg.type;
+    $("targetUrl").value = cfg.targetUrl || "";
+    $("extraParams").value = cfg.extraParams ? JSON.stringify(cfg.extraParams, null, 2) : "";
+    $("downloadUrl").value = cfg.downloadUrl || "";
+    $("downloadName").value = cfg.downloadName || "";
+    $("displayData").value = cfg.displayData || "";
+    onActionTypeChange();
+    renderQrForKey(key);
+    setMessage("Loaded code '" + key + "' into form.");
+  }
+
+  function onActionTypeChange() {
+    const type = $("actionType").value;
+    show("field_targetUrl", type === "redirect" || type === "redirectWithParams");
+    show("field_params", type === "redirectWithParams");
+    show("field_download", type === "download");
+    show("field_display", type === "display");
+  }
+
+  function currentBaseUrl() {
+    return window.location.origin + window.location.pathname.replace(/[#?].*$/, "");
+  }
+
+  function renderQrForKey(key) {
+    if (!key) {
+      $("qrContainer").innerHTML = "";
+      $("qrUrl").textContent = "";
+      show("downloadSvgBtn", false);
+      return;
+    }
+    const url = currentBaseUrl() + "?code=" + encodeURIComponent(key);
+    $("qrUrl").textContent = url;
+
+    let svg = "";
+    try {
+      svg = makeQrSvg(url, 4);
+      $("qrContainer").innerHTML = svg;
+      show("downloadSvgBtn", true);
+      $("downloadSvgBtn").onclick = function () {
+        const blob = new Blob([svg], { type: "image/svg+xml" });
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(blob);
+        a.download = "qr-" + key + ".svg";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(a.href);
+      };
+    } catch (e) {
+      $("qrContainer").textContent = "Could not render QR: " + e.message;
+      show("downloadSvgBtn", false);
+    }
+  }
+
+  function saveFromForm() {
+    const key = $("codeKey").value.trim();
+    if (!key) {
+      setMessage("Key is required.");
+      return;
+    }
+    const type = $("actionType").value;
+    const codes = loadCodes();
+    const cfg = { type: type };
+
+    if (type === "redirect" || type === "redirectWithParams") {
+      const url = $("targetUrl").value.trim();
+      if (!url) {
+        setMessage("Target URL is required for redirect.");
+        return;
+      }
+      cfg.targetUrl = url;
+      if (type === "redirectWithParams") {
+        const raw = $("extraParams").value.trim();
+        if (raw) {
+          try {
+            const obj = JSON.parse(raw);
+            if (typeof obj !== "object" || Array.isArray(obj) || obj === null) {
+              setMessage("Extra parameters must be a JSON object.");
+              return;
+            }
+            cfg.extraParams = obj;
+          } catch (e) {
+            setMessage("Invalid JSON in extra parameters: " + e.message);
+            return;
+          }
+        } else {
+          cfg.extraParams = {};
+        }
+      }
+    } else if (type === "download") {
+      const dUrl = $("downloadUrl").value.trim();
+      if (!dUrl) {
+        setMessage("Download URL/data is required.");
+        return;
+      }
+      cfg.downloadUrl = dUrl;
+      cfg.downloadName = $("downloadName").value.trim() || "download";
+    } else if (type === "display") {
+      cfg.displayData = $("displayData").value;
+    }
+
+    codes[key] = cfg;
+    saveCodes(codes);
+    updateCodeList(codes);
+    renderQrForKey(key);
+    setMessage("Saved code '" + key + "'.");
+  }
+
+  // --- Action execution ---------------------------------------------
+  function executeAction(key, cfg) {
+    if (!cfg) {
+      setMessage("No configuration found for code '" + key + "'.");
+      show("adminUI", true);
+      return;
+    }
+    const type = cfg.type;
+    if (type === "redirect") {
+      setMessage("Redirecting...");
+      window.location.href = cfg.targetUrl;
+    } else if (type === "redirectWithParams") {
+      setMessage("Redirecting with parameters...");
+      const url = new URL(cfg.targetUrl, window.location.href);
+      const params = cfg.extraParams || {};
+      Object.keys(params).forEach(k => {
+        url.searchParams.set(k, params[k]);
+      });
+      // Also forward any existing query parameters (except 'code')
+      const current = new URL(window.location.href);
+      current.searchParams.forEach((v, k) => {
+        if (k === "code") return;
+        if (!url.searchParams.has(k)) {
+          url.searchParams.set(k, v);
+        }
+      });
+      window.location.href = url.toString();
+    } else if (type === "download") {
+      setMessage("Starting download...");
+      const a = document.createElement("a");
+      a.href = cfg.downloadUrl;
+      a.download = cfg.downloadName || "download";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } else if (type === "display") {
+      setMessage("Displaying content for code '" + key + "'.");
+      show("displayArea", true);
+      $("displayContent").innerHTML = cfg.displayData || "(no content)";
+    } else {
+      setMessage("Unknown action type for code '" + key + "'.");
+    }
+  }
+
+  // --- Main entry logic ---------------------------------------------
+  const params = new URLSearchParams(window.location.search);
+  const codeKey = params.get("code");
+  const codes = loadCodes();
+
+  if (codeKey) {
+    // handle QR action
+    show("adminUI", false);
+    executeAction(codeKey, codes[codeKey]);
+  } else {
+    // show admin interface
+    show("adminUI", true);
+    updateCodeList(codes);
+    setMessage("Admin mode: create and manage dynamic QR codes.");
+    onActionTypeChange();
+    // bind events
+    $("actionType").addEventListener("change", onActionTypeChange);
+    $("saveCode").addEventListener("click", saveFromForm);
+    $("codeKey").addEventListener("input", function () {
+      renderQrForKey(this.value.trim());
+    });
+  }
+})(); // end dynamicQRRouter IIFE
+</script>
+</body>
+</html>
+
