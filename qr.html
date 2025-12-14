@@ -857,7 +857,12 @@ function makeQrSvg(text, scale = 4, margin = 4, ecLevel = 'M') {
         if (matrix[r][c] === 1) {
           const x = (c + quiet) * moduleSize;
           const y = (r + quiet) * moduleSize;
-          rects += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#000"/>`;
+          if (matrix[r][c] === 1) {
+    rects += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#000"/>`;
+} else if (matrix[r][c] === 0) {
+    rects += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#fff"/>`;
+}
+         // rects += `<rect x="${x}" y="${y}" width="${moduleSize}" height="${moduleSize}" fill="#000"/>`;
         }
       }
     }
