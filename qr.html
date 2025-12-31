@@ -97,7 +97,7 @@
       <div class="small">Click a key to load it into the editor.</div>
       <div id="codeList"></div>
       <hr>
-      <div id="updatedJSON"></div>
+      <textarea id="updatedJSON" readonly></textarea>
     </div>
   </div>
 </div>
@@ -122,18 +122,21 @@
   function $(id) { return document.getElementById(id); }
 
   function loadCodes() {
+    let codes = {};
     try {
       const raw = localStorage.getItem("dynamicQrCodes") || "{}";
       const _defaults = {"test":{"type":"redirect","targetUrl":"http://"},"test1":{"type":"redirectWithParams","targetUrl":"http://1","extraParams":{"test":1}},"test2":{"type":"download","downloadUrl":"http://2","downloadName":"2.pdf"},"test3":{"type":"display","displayData":"333"}};
-      return {..._defaults, ...JSON.parse(raw)};
+      codes= {..._defaults, ...JSON.parse(raw)};
     } catch (e) {
-      return {};
+      //return {};
     }
+    document.getElementById("updatedJSON").value = JSON.stringify(codes);
+    return codes;
   }
 
   function saveCodes(codes) {
     localStorage.setItem("dynamicQrCodes", JSON.stringify(codes));
-    document.getElementById("updatedJSON").textContent = JSON.stringify(codes);
+    document.getElementById("updatedJSON").value = JSON.stringify(codes);
   }
 
   function updateCodeList(codes) {
