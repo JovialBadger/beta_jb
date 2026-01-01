@@ -997,12 +997,27 @@ var qrcodegen = qrcodegen || {};
       window.location.href = url.toString();
     } else if (type === "download") {
       setMessage("Starting download...");
-      const a = document.createElement("a");
-      a.href = cfg.downloadUrl;
-      a.download = cfg.downloadName || "download";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
+      if (cfg.downloadUrl.startsWith("data:")) {
+        const a = document.createElement("a");
+        a.href = cfg.downloadUrl;
+        a.download = cfg.downloadName || "download";
+        document.body.appendChild(a);
+        a.click();
+        //document.body.removeChild(a);
+      } else {
+        fetch(cfg.downloadUrl)
+          .then(res => res.blob())
+          .then(blob => {
+            const a = document.createElement("a");
+            a.href = URL.createObjectURL(blob);
+            a.download = cfg.downloadName || "download";
+            document.body.appendChild(a);
+            a.click();
+            //document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+          })
+          .catch(err => setMessage("Download failed: " + err.message));
+      }
     } else if (type === "display") {
       setMessage("Displaying content for code '" + key + "'.");
       show("displayArea", true);

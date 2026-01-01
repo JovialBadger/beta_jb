@@ -3,7 +3,7 @@
 // ==UserScript==
 // @name        JB_Script_Media-Gallery
 // @description Media Gallery (single-function, vanilla JS)
-// @version     0.1.3
+// @version     0.1.4
 // @namespace   Jovial-Badger_Scripts
 // @match       *://*/*
 // @grant       none
@@ -104,7 +104,7 @@ function mediaGallery(userOptions = {}) {
   if (!items.length) items = extractGroupedSelectorsFromPage([{ mediaSelector: { selector: 'img', attr: 'src' } },{ mediaSelector: { selector: 'video source', attr: 'src' } }]);
   if (!items.length) return;
 
-  function extractGroupedSelectorsFromPage(media, direct) {
+  function extractGroupedSelectorsFromPage(media, direct=[]) {
     const results = [];
     media.forEach(m => {
       const _media = extractBySelectors(m.mediaSelector);
@@ -1469,7 +1469,10 @@ function mediaGallery(userOptions = {}) {
     if (!options.enableDownload) return;
     const item = passItem || currentItem();
     try {
-      const blob = await fetch(item.url, { mode: 'cors' }).then(r => r.blob());
+      function normalizeUrl(url) {
+        return new URL(url, window.location.href).href;
+      }     
+      const blob = await fetch(normalizeUrl(item.url), { mode: 'cors' }).then(r => r.blob());
       const a = document.createElement('a');
       const url = URL.createObjectURL(blob);
       a.href = url;
