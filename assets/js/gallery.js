@@ -3,7 +3,7 @@
 // ==UserScript==
 // @name        JB_Script_Media-Gallery
 // @description Media Gallery (single-function, vanilla JS)
-// @version     0.1.5
+// @version     0.1.6
 // @namespace   Jovial-Badger_Scripts
 // @match       *://*/*
 // @grant       none
@@ -1600,7 +1600,7 @@ function mediaGallery(userOptions = {}) {
       btn.addEventListener('click', (e) => {
         e.preventDefault(); e.stopPropagation();
         const displayIdx = state.orderMap.indexOf(origIdx);
-        if (displayIdx >= 0) { state.currentIndex = displayIdx; openGallery(true); }
+        if (displayIdx >= 0) { state.currentIndex = displayIdx; renderAll();openGallery(true); }
       });
       if (it.sourceEl instanceof HTMLAnchorElement) {
         it.sourceEl.addEventListener('click', (e) => { e.preventDefault(); });
