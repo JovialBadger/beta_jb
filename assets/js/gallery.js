@@ -3,7 +3,7 @@
 // ==UserScript==
 // @name        JB_Script_Media-Gallery
 // @description Media Gallery (single-function, vanilla JS)
-// @version     0.1.4
+// @version     0.1.5
 // @namespace   Jovial-Badger_Scripts
 // @match       *://*/*
 // @grant       none
@@ -45,6 +45,7 @@ function mediaGallery(userOptions = {}) {
     loopGallery: false,
     imageAutoAdvance: true,
     imageDelayMs: 30000,
+    stopBackgroundPlayback: true,
 
     videoAutoplay: false,
     videoMute: false,
@@ -159,6 +160,7 @@ function mediaGallery(userOptions = {}) {
       loopGallery: options.loopGallery,
       imageAutoAdvance: options.imageAutoAdvance,
       imageDelayMs: options.imageDelayMs,
+      stopBackgroundPlayback: options.stopBackgroundPlayback,
 
       videoAutoplay: options.videoAutoplay,
       videoMute: options.videoMute,
@@ -1385,7 +1387,7 @@ function mediaGallery(userOptions = {}) {
   let playingOnHide = false;
 
   document.addEventListener("visibilitychange", () => {
-    if (document.hidden) {
+    if (document.hidden && options.stopBackgroundPlayback) {
       playingOnHide = state.playing;
       togglePlayPause("Pause");
     } else if (playingOnHide) {
@@ -1635,6 +1637,7 @@ function mediaGallery(userOptions = {}) {
       ['enableFullscreen', 'Fullscreen button'],
       ['enableMetadataPanel', 'Metadata panel'],
       ['loopGallery', 'Loop whole gallery'],
+      ['stopBackgroundPlayback', 'Pause on tab hide']
     ];
     bools.forEach(([key, label]) => {
       grid.appendChild(h(`<div class="mg-setting"><label>${label}</label><input type="checkbox" data-key="${key}"></div>`));
