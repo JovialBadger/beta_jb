@@ -132,7 +132,7 @@ function mediaGallery(userOptions = {}) {
   const dom = buildDOM(options);
 
   // Shared index via hash
-  const sharedIndex = getSharedIndexFromURL();
+  const sharedIndex = handleQuery();
   if (Number.isFinite(sharedIndex[0]) && sharedIndex[0] >= 0 && sharedIndex[0] < state.orderMap.length) {
     state.currentIndex = sharedIndex[0];
   }
@@ -289,17 +289,18 @@ function mediaGallery(userOptions = {}) {
     }
     return b;
   }
-  function handleQuery(index = -1) {
+  function handleQuery() {
     const url = new URL(window.location.href);
     const shareMediaGallery = url.searchParams.get('shareMediaGallery');
-    url.searchParams.delete('shareMediaGallery')
-    if (index > -1) url.searchParams.set('mediaGallery', index);
+    const urlIndex = url.searchParams.get('mediaGallery');
+    url.searchParams.delete('shareMediaGallery');
+    url.searchParams.delete('mediaGallery');
+    //if (index > -1) url.searchParams.set('mediaGallery', index);
     window.history.replaceState(null, '', url.toString());
-    var urlIndex = url.searchParams.get('mediaGallery');
     return [Number(urlIndex === null ? -1 : urlIndex), !!shareMediaGallery];
   }
-  function getSharedIndexFromURL() { return handleQuery(); }//const m = location.hash.match(/gallery=(\d+)/); return m ? Number(m[1]) : NaN;}
-  function setShareIndexInURL(i) { if (!options.enableShare) return; const base = location.href.replace(location.hash, ''); const newHash = `#gallery=${i}`; history.replaceState(null, '', base + newHash); }
+  //function getSharedIndexFromURL() { return handleQuery(); }//const m = location.hash.match(/gallery=(\d+)/); return m ? Number(m[1]) : NaN;}
+  //function setShareIndexInURL(i) { if (!options.enableShare) return; const base = location.href.replace(location.hash, ''); const newHash = `#gallery=${i}`; history.replaceState(null, '', base + newHash); }
   function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
   function queryAll(sel) { return Array.from(document.querySelectorAll(sel)); }
 
@@ -1019,7 +1020,7 @@ function mediaGallery(userOptions = {}) {
     //if (dom.inlineToolbar) updateIndexDisplay(dom.inlineToolbar);
     updateToolbarStates();
     persistIndex();
-    handleQuery(state.currentIndex);
+    //handleQuery(state.currentIndex);
   }
   function currentItem() {
     const origIdx = state.orderMap[state.currentIndex];
@@ -1530,7 +1531,8 @@ function mediaGallery(userOptions = {}) {
     if (!options.enableShare) return;
     //setShareIndexInURL(state.currentIndex);
     const url = new URL(window.location.href);
-    url.searchParams.set('shareMediaGallery', '1')
+    url.searchParams.set('shareMediaGallery', '1');
+    url.searchParams.set('mediaGallery', state.currentIndex.toString());
     //const url = location.href;
     navigator.clipboard?.writeText(url).catch(() => { });
     queryAll('.mg-share').forEach(b => { b.classList.add('mg-primary'); setTimeout(() => b.classList.remove('mg-primary'), 500); });
