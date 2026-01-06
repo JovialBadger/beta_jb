@@ -967,6 +967,7 @@ function mediaGallery(userOptions = {}) {
       el.className = 'mg-thumb';
       el.title = item.meta?.title || '';
       const img = document.createElement('img');
+      img.loading = 'lazy';
       img.src = item.thumb || item.url;
       img.alt = item.meta?.title || `Item ${dispIdx + 1}`;
       el.appendChild(img);
