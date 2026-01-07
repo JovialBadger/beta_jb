@@ -3,7 +3,7 @@
 // ==UserScript==
 // @name        JB_Script_Media-Gallery
 // @description Media Gallery (single-function, vanilla JS)
-// @version     0.1.6
+// @version     0.1.7
 // @namespace   Jovial-Badger_Scripts
 // @match       *://*/*
 // @grant       none
@@ -1017,7 +1017,7 @@ function mediaGallery(userOptions = {}) {
     renderMediaInto(dom.media, dom.panel, dom.toolbar);
     highlightActiveThumb();
     centerActiveThumb();
-    updateIndexDisplay(dom.toolbar);
+    updateIndexDisplay();
     //if (dom.inlineToolbar) updateIndexDisplay(dom.inlineToolbar);
     updateToolbarStates();
     persistIndex();
@@ -1117,7 +1117,8 @@ function mediaGallery(userOptions = {}) {
       });
       vid.addEventListener('loadedmetadata', () => {
         displayVideoTime(vid);
-        if (options.enableMetadataPanel) updatePanel(panelEl, item, { width: vid.videoWidth, height: vid.videoHeight, duration: vid.duration });
+        //if (options.enableMetadataPanel) 
+        updatePanel(panelEl, item, { width: vid.videoWidth, height: vid.videoHeight, duration: vid.duration });
       });
       vid.addEventListener('timeupdate', () => {
         displayVideoTime(vid);
@@ -1156,9 +1157,8 @@ function mediaGallery(userOptions = {}) {
 
       // Metadata
       aud.addEventListener('loadedmetadata', () => {
-        if (options.enableMetadataPanel) {
-          updatePanel(panelEl, item, { duration: aud.duration });
-        }
+        //if (options.enableMetadataPanel)
+        updatePanel(panelEl, item, { duration: aud.duration });
       });
 
       // Auto-advance
@@ -1186,7 +1186,8 @@ function mediaGallery(userOptions = {}) {
       iframe.src = `https://www.youtube.com/embed/${id}?rel=0&modestbranding=1`;
       wrap.appendChild(iframe);
       node = wrap;
-      if (options.enableMetadataPanel) updatePanel(panelEl, item, {});
+      //if (options.enableMetadataPanel)
+      updatePanel(panelEl, item, {});
     } else if (item.type === 'vimeo') {
       const wrap = document.createElement('div');
       wrap.className = 'mg-iframe-wrap';
@@ -1197,7 +1198,8 @@ function mediaGallery(userOptions = {}) {
       iframe.src = `https://player.vimeo.com/video/${id}`;
       wrap.appendChild(iframe);
       node = wrap;
-      if (options.enableMetadataPanel) updatePanel(panelEl, item, {});
+      //if (options.enableMetadataPanel) 
+      updatePanel(panelEl, item, {});
     } else {//image and default
       const img = document.createElement('img');
       img.className = 'mg-media-content';
@@ -1205,7 +1207,8 @@ function mediaGallery(userOptions = {}) {
       img.alt = item.meta?.title || '';
       img.style.transform = computeMediaTransform();
       img.addEventListener('load', () => {
-        if (options.enableMetadataPanel) updatePanel(panelEl, item, { width: img.naturalWidth, height: img.naturalHeight });
+        //if (options.enableMetadataPanel) 
+        updatePanel(panelEl, item, { width: img.naturalWidth, height: img.naturalHeight });
       });
       node = img;
     }
@@ -1219,6 +1222,14 @@ function mediaGallery(userOptions = {}) {
   }
 
   function updatePanel(panelEl, item, detected = {}) {
+    const detected_keys = Object.keys(detected);
+    detected_keys.forEach(key => {
+      if (detected[key] !== undefined && detected[key] !== null) {
+        item.meta[key] = detected[key];
+      }
+    });
+    const origIdx = state.orderMap[state.currentIndex];
+    state.items[origIdx] = item; // Update stored meta info
     if (!options.enableMetadataPanel) {
       panelEl.innerHTML = '';
       return;
@@ -1227,7 +1238,6 @@ function mediaGallery(userOptions = {}) {
       try { return decodeURIComponent(new URL(item.url, location.href).pathname.split('/').pop() || ''); }
       catch { return (item.url.split('?')[0].split('/').pop()) || ''; }
     })();
-
     const lines = [];
     if (item.meta && Object.keys(item.meta).length) {
       Object.entries(item.meta).forEach(([k, v]) => {
@@ -1235,13 +1245,13 @@ function mediaGallery(userOptions = {}) {
       });
     }
     if (fname) lines.push(`<div class="mg-row"><strong>File:</strong> <code>${escapeHtml(fname)}</code></div>`);
-    if (detected.width && detected.height) lines.push(`<div class="mg-row"><strong>Dimensions:</strong> ${detected.width} × ${detected.height}</div>`);
-    if (typeof detected.duration === 'number' && isFinite(detected.duration)) lines.push(`<div class="mg-row"><strong>Duration:</strong> ${Math.round(detected.duration)}s</div>`);
+    //if (detected.width && detected.height) lines.push(`<div class="mg-row"><strong>Dimensions:</strong> ${detected.width} × ${detected.height}</div>`);
+    //if (typeof detected.duration === 'number' && isFinite(detected.duration)) lines.push(`<div class="mg-row"><strong>Duration:</strong> ${Math.round(detected.duration)}s</div>`);
     lines.push(`<div class="mg-row"><strong>Type:</strong> ${escapeHtml(item.type)}</div>`);
     panelEl.innerHTML = `<h4>Info</h4>${lines.join('')}`;
   }
 
-  function updateIndexDisplay(header) {//get input to work from all locations
+  function updateIndexDisplay() {//get input to work from all locations
     const text = `${state.currentIndex + 1} / ${state.orderMap.length}`;
     document.querySelector('.mg-idx').textContent = text;//toolbar.
   }
