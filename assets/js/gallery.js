@@ -3,7 +3,7 @@
 // ==UserScript==
 // @name        JB_Script_Media-Gallery
 // @description Media Gallery (single-function, vanilla JS)
-// @version     0.1.8
+// @version     0.1.9
 // @namespace   Jovial-Badger_Scripts
 // @match       *://*/*
 // @grant       none
@@ -15,6 +15,7 @@
 // @run-at      document-end
 // @grant       GM_setValue
 // @grant       GM_getValue
+// @grant       GM_listValues
 // @grant       GM_deleteValue
 // ==/UserScript==
 /*
@@ -74,11 +75,13 @@ function mediaGallery(userOptions = {}) {
   const defaultOverride = isUserScript() ? (safeParse(GM_getValue("defaultOverride")) || {}) : {};
   const savedSettings = safeParse(localStorage.getItem(LS.settings)) || {};
   const options = { ...DEFAULTS, ...defaultOverride, ...userOptions, ...savedSettings };
-
-  const isRandomOrder = options.order === 'random';
-  const savedIndex = !isRandomOrder ? Number(localStorage.getItem(LS.index) || (isUserScript() ? GM_getValue(LS.index):NaN)) : NaN;
-  if (Number.isFinite(savedIndex)) options.startIndex = savedIndex;
-
+  if (options.order !== 'random') {
+    const savedIndex = Number(localStorage.getItem(LS.index));
+    const gmIndex = isUserScript() ? Number(GM_getValue(LS.index)) : NaN;
+    if (Number.isFinite(savedIndex) && (savedIndex>0)) {options.startIndex = savedIndex;}
+    else if (Number.isFinite(gmIndex) && (gmIndex>0)) {options.startIndex = gmIndex;}
+    console.log("Restored gallery index: GM:", gmIndex,"Local:", savedIndex,"Restored:", options.startIndex);
+  }
   // Persist so Settings reflects merged state
   persistSettings();
 
@@ -152,7 +155,7 @@ function mediaGallery(userOptions = {}) {
     // Save only serializable options, avoid DOM refs
     const toSave = {
       container: typeof options.container === 'string' ? options.container : null,
-      startIndex: options.startIndex,
+      //startIndex: options.startIndex,
       order: options.order,
       hideThumbnails: options.hideThumbnails,
       enableDownload: options.enableDownload,
@@ -191,7 +194,7 @@ function mediaGallery(userOptions = {}) {
     localStorage.setItem(LS.settings, JSON.stringify(clone));
   }
   function persistIndex() { 
-    if (!isRandomOrder) {
+    if (options.order !== 'random') {
       localStorage.setItem(LS.index, String(state.currentIndex)); 
       if (isUserScript()) GM_setValue(LS.index, state.currentIndex);
     }
@@ -864,7 +867,7 @@ function mediaGallery(userOptions = {}) {
       <button class="mg-fullscreen" title="Fullscreen">⛶</button>
       <button class="mg-share" title="Share link">🔗</button>
       <span class="mg-spacer"></span>
-      <button class="mg-settings-btn" ` + (options.allowUserSettings ? `style="display:none"` : ``) + ` title="Settings">⚙</button>
+      <button class="mg-settings-btn" ` + (options.allowUserSettings ? ``:`style="display:none"` ) + ` title="Settings">⚙</button>
     `;//<span class="mg-idx"></span>
     media.appendChild(toolbar);
 
@@ -1779,6 +1782,7 @@ function mediaGallery(userOptions = {}) {
     adv.querySelector('.mg-reset').addEventListener('click', () => {
       localStorage.removeItem(LS.settings);
       localStorage.removeItem(LS.index);
+      if (isUserScript()) {GM_deleteValue(LS.index);}
       const current = state.currentIndex;
       Object.assign(options, DEFAULTS);
       options.startIndex = clamp(current, 0, state.orderMap.length - 1);
