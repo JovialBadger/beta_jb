@@ -3,7 +3,7 @@
 // ==UserScript==
 // @name        JB_Script_Media-Gallery
 // @description Media Gallery (single-function, vanilla JS)
-// @version     0.1.7
+// @version     0.1.8
 // @namespace   Jovial-Badger_Scripts
 // @match       *://*/*
 // @grant       none
@@ -23,15 +23,15 @@
  * - No external deps. Injected CSS only.
  *
  * Usage:
- *   mediaGallery({ /* options as in the original spec  });
+ *   mediaGallery({ /* options as in the const DEFAULTS = { ... } * / });
  */
 function isUserScript() { return typeof GM_setValue === "function" }
 function mediaGallery(userOptions = {}) {
   // --------- Configuration & Persistence ----------
   const DEFAULTS = {
     container: null, // selector or Element
-    media: [{ mediaSelector: { selector: 'img', attr: 'src' } }],
-    direct: [],//{ url:x, thumb:z, meta:{}};
+    direct: [],//{ url:url, thumb:url, meta:{}};
+    media: [],//DOM scraping  { mediaSelector: { selector:'img', attr:'src' }, thumbSelector: { selector:'img.thumb', attr:'src' } , metaMap: { url: { key: value }}};
 
     startIndex: 0,
     order: 'forwards', // 'forwards' | 'backwards' | 'random'
@@ -61,7 +61,7 @@ function mediaGallery(userOptions = {}) {
 
     idleTimeoutMs: 0,
     addOpenButtonsNextToMedia: false,
-
+    allowUserSettings: (isUserScript() ? true : false),
     namespace: null,
   };
   let _imgTimer;
@@ -76,7 +76,7 @@ function mediaGallery(userOptions = {}) {
   const options = { ...DEFAULTS, ...defaultOverride, ...userOptions, ...savedSettings };
 
   const isRandomOrder = options.order === 'random';
-  const savedIndex = !isRandomOrder ? Number(localStorage.getItem(LS.index)) : NaN;
+  const savedIndex = !isRandomOrder ? Number(localStorage.getItem(LS.index) || (isUserScript() ? GM_getValue(LS.index):NaN)) : NaN;
   if (Number.isFinite(savedIndex)) options.startIndex = savedIndex;
 
   // Persist so Settings reflects merged state
@@ -102,7 +102,11 @@ function mediaGallery(userOptions = {}) {
 
   // --------- Build media list ----------
   let items = extractGroupedSelectorsFromPage(options.media, options.direct);
-  if (!items.length) items = extractGroupedSelectorsFromPage([{ mediaSelector: { selector: 'img', attr: 'src' } },{ mediaSelector: { selector: 'video source', attr: 'src' } }]);
+  if (!items.length) items = extractGroupedSelectorsFromPage([
+    { mediaSelector: { selector: 'img', attr: 'src' } },
+    { mediaSelector: { selector: 'video source', attr: 'src' } },
+    { mediaSelector: { selector: 'audio source', attr: 'src' } }
+  ]);
   if (!items.length) return;
 
   function extractGroupedSelectorsFromPage(media, direct=[]) {
@@ -186,7 +190,12 @@ function mediaGallery(userOptions = {}) {
     clone.direct = options.direct;
     localStorage.setItem(LS.settings, JSON.stringify(clone));
   }
-  function persistIndex() { if (!isRandomOrder) localStorage.setItem(LS.index, String(state.currentIndex)); }
+  function persistIndex() { 
+    if (!isRandomOrder) {
+      localStorage.setItem(LS.index, String(state.currentIndex)); 
+      if (isUserScript()) GM_setValue(LS.index, state.currentIndex);
+    }
+  }
   function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
   function resolveContainer(c) { if (!c) return null; if (typeof c === 'string') return document.querySelector(c); if (c instanceof Element) return c; return null; }
 
@@ -855,8 +864,7 @@ function mediaGallery(userOptions = {}) {
       <button class="mg-fullscreen" title="Fullscreen">⛶</button>
       <button class="mg-share" title="Share link">🔗</button>
       <span class="mg-spacer"></span>
-
-      <button class="mg-settings-btn" title="Settings">⚙</button>
+      <button class="mg-settings-btn" ` + (options.allowUserSettings ? `style="display:none"` : ``) + ` title="Settings">⚙</button>
     `;//<span class="mg-idx"></span>
     media.appendChild(toolbar);
 
@@ -1123,6 +1131,7 @@ function mediaGallery(userOptions = {}) {
       vid.addEventListener('timeupdate', () => {
         displayVideoTime(vid);
       });
+      
       node = vid;
     } else if (item.type === 'audio') {
       const wrap = document.createElement('div');
