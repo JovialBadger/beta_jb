@@ -820,7 +820,7 @@ function mediaGallery(userOptions = {}) {
     // Settings with close button (FIX: close from settings)
     const settings = document.createElement('div');
     settings.className = 'mg-settings';
-    settings.innerHTML = `<button class="mg-close-settings" title="Close settings" style="width:100%;">Close Settings</button>` + (isUserScript() ? `<button class="mg-saveas-default-settings" title="Save as default settings" style="width:100%;">Save as Default Settings</button>` : '');
+    settings.innerHTML = `<button class="mg-close-settings" title="Close settings" style="width:100%;">Close Settings</button><button ` + (isUserScript() ? `` : `style="display:none"`) + ` class="mg-saveas-default-settings" title="Save as default settings" style="width:100%;">Save as Default Settings</button>`;
     overlay.appendChild(settings);
     settings.querySelector('.mg-close-settings').addEventListener('click', () => {
       settings.classList.remove('mg-open');
