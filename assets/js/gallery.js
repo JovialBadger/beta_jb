@@ -6,7 +6,6 @@
 // @version     0.1.9
 // @namespace   Jovial-Badger_Scripts
 // @match       *://*/*
-// @grant       none
 // @author      Jovial Badger
 // @downloadURL {{ site.url }}{{page.url | relative_url }}
 // @updateURL   {{ site.url }}{{page.url | relative_url }}

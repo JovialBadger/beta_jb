@@ -45,7 +45,7 @@ function AnalogClockApp(containerId, clocksConfig = []) {
   // Defaults
   var DEFAULTS = {
     id: null,
-    type: 'analog', // analog | digital
+    type: 'digital', // analog | digital
     shape: 'round', // round | square | oval | custom
     customPath: '', // for custom shape svg path (d attribute)
     timezone: 0, // offset hours from UTC (can be fractional)
