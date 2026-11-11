@@ -105,12 +105,32 @@ function pageAlreadyLooksDark() {
     button.textContent = !pageIsDark ? "☀️" : "🌙";
   }
 
+const debounce = (fn, delay=1000) => {
+  let t = null;
+  return function(...args) {
+    clearTimeout(t);
+    t = setTimeout(() => {
+      fn(...args);
+    }, delay);
+  }
+};
+function throttle(callback, delay = 1000) {
+      let shouldWait = false;
+      return (...args) => {
+        if (shouldWait) return;
+        callback(...args);
+        shouldWait = true;
+        setTimeout(() => {
+              shouldWait = false;
+        }, delay);
+      };
+}
   // Toggle handler
-  button.addEventListener("click", () => {
+  button.addEventListener("click", throttle(() => {
     const enabled = document.documentElement.classList.toggle("dark-mode");
     button.textContent = enabled ? (!pageIsDark ? "☀️" : "🌙") : (pageIsDark ? "☀️" : "🌙");
     localStorage.setItem("darkMode", enabled);
-  });
+  }, 100));
 
   document.body.appendChild(button);
 })();
