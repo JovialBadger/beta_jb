@@ -183,6 +183,7 @@ function mediaGallery(userOptions = {}) {
 
       idleTimeoutMs: options.idleTimeoutMs,
       addOpenButtonsNextToMedia: options.addOpenButtonsNextToMedia,
+      allowUserSettings: options.allowUserSettings,
       namespace: options.namespace,
     };
     if (isUserScript() && saveGlobalOverride) GM_setValue("defaultOverride", JSON.stringify(toSave));
